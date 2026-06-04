@@ -1,14 +1,15 @@
 import asyncio
 import json
-import os  # <- Módulo integrado para leer variables de entorno del servidor
+import os
 import requests
 import time
 from openai import OpenAI
 import websockets
 
 # --- CONFIGURACIÓN DE CREDENCIALES ---
-GROK_API_KEY = "TU_API_KEY_DE_GROK"
-FOOTBALL_API_KEY = "TU_API_KEY_DE_API_FOOTBALL"
+# Prioriza las variables de entorno de Render; si no existen, usa el texto por defecto.
+GROK_API_KEY = os.environ.get("GROK_API_KEY", "TU_API_KEY_DE_GROK")
+FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "TU_API_KEY_DE_API_FOOTBALL")
 
 # Inicialización oficial de Grok (xAI) usando compatibilidad OpenAI
 client = OpenAI(
@@ -18,7 +19,9 @@ client = OpenAI(
 
 # --- VARIABLES DE CONTROL (CACHÉ, SALAS Y RANKING) ---
 ULTIMO_PARTIDO_ID = None
-TRIVIA_ACTUAL_JSON = '{"pregunta": "Cargando trivia...", "opciones": ["-", "-", "-"], "correcta": ""}'
+
+# Se cambió la pregunta inicial vacía por una trivia real de respaldo para que nunca aparezca en blanco
+TRIVIA_ACTUAL_JSON = '{"pregunta": "¿Qué selección ganó el Mundial de Qatar 2022?", "opciones": ["Francia", "Argentina", "Brasil"], "correcta": "Argentina"}'
 
 jugadores_esperando = []
 salas_activas = {}
@@ -32,14 +35,15 @@ def consultar_api_futbol():
     """Consulta el último partido finalizado (FT) en la liga configurada."""
     url = "https://v3.football.api-sports.io/fixtures"
     querystring = {"league": "128", "season": "2026", "status": "FT", "last": "1"}
+    
+    # CORREGIDO: Usamos la cabecera directa de API-Sports ya que usas su URL directa
     headers = {
-        'x-rapidapi-host': "v3.football.api-sports.io",
-        'x-rapidapi-key': FOOTBALL_API_KEY
+        'x-apisports-key': FOOTBALL_API_KEY
     }
     try:
         response = requests.get(url, headers=headers, params=querystring)
         data = response.json()
-        if data and data.get('response'):
+        if data and data.get('response') and len(data['response']) > 0:
             return data['response'][0]
     except Exception as e:
         print(f"[ERROR API FÚTBOL]: {e}")
@@ -181,7 +185,7 @@ async def manejar_cliente(websocket):
                         "tiempo": tiempo_respuesta
                     }
                     
-                    # Evaluación cuando ambos terminan de responder en la sala
+                    # CORREGIDO: Cierre y resolución de la partida multijugador completo
                     if len(sala["respuestas_recibidas"]) == 2:
                         ganador_sala = "Empate / Nadie acertó"
                         mejor_tiempo = 9999.0
@@ -202,7 +206,6 @@ async def manejar_cliente(websocket):
                             "ranking_global": RANKING_GLOBAL
                         })
                         
-                        # Notificar fin de partida a todos los contrincantes de la sala
                         for jugador_ws in sala["jugadores"]:
                             try:
                                 await jugador_ws.send(payload_fin)
@@ -210,7 +213,7 @@ async def manejar_cliente(websocket):
                                 pass
                                 
                         del salas_activas[id_sala]
-                        print(f"[SALA]: {id_sala} cerrada con éxito. Ganador: {ganador_sala}")
+                        print(f"[SALA]: {id_sala} cerrada. Ganador: {ganador_sala}")
 
     except websockets.exceptions.ConnectionClosed:
         print(f"[RED]: {nombre_jugador} desconectado.")
@@ -218,14 +221,11 @@ async def manejar_cliente(websocket):
         if websocket in jugadores_esperando:
             jugadores_esperando.remove(websocket)
 
+# CORREGIDO: Añadido el bucle asíncrono principal obligatorio para Render
 async def main():
-    # Inicializa el demonio de sincronización de partidos en segundo plano
     asyncio.create_task(bucle_verificacion_partidos())
-    
-    # El servidor lee dinámicamente el puerto asignado por Render (o usa 8765 localmente)
     puerto = int(os.environ.get("PORT", 8765))
     print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
-    
     async with websockets.serve(manejar_cliente, "0.0.0.0", puerto):
         await asyncio.Future()
 
