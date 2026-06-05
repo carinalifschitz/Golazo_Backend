@@ -11,80 +11,97 @@ from fastapi.middleware.cors import CORSMiddleware
 GROK_API_KEY = os.environ.get("GROK_API_KEY")
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
 
-# --- BANCO DE RESPALDO INTEGRADO (40 PREGUNTAS COMPLETAS) ---
+# --- BANCO DE RESPALDO INTEGRADO (40 PREGUNTAS COMPLETAS SOBRE QATAR 2022) ---
 BANCO_RESPALDO = [
-    {"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"},
-    {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"},
-    {"pregunta": "¿En qué club europeo debutó profesionalmente Sergio 'Kun' Agüero?", "opciones": ["Atlético de Madrid", "Manchester City", "Barcelona"], "correcta": "Atlético de Madrid"},
-    {"pregunta": "¿Quién fue el director técnico de la Selección Argentina en el Mundial de Sudáfrica 2010?", "opciones": ["Diego Maradona", "Alejandro Sabella", "Alfio Basile"], "correcta": "Diego Maradona"},
-    {"pregunta": "¿Qué país organizó y ganó el Mundial de fútbol de 1998?", "opciones": ["Francia", "Brasil", "Italia"], "correcta": "Francia"},
-    {"pregunta": "¿Cuál es el estadio de fútbol con mayor capacidad de espectadores en Sudamérica?", "opciones": ["Estadio Mâs Monumental", "Estadio Maracaná", "Estadio Centenario"], "correcta": "Estadio Mâs Monumental"},
-    {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' en 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
-    {"pregunta": "¿Qué club de la Liga Argentina es conocido popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
-    {"pregunta": "¿Quién ganó el Balón de Oro en el año 2023?", "opciones": ["Lionel Messi", "Erling Haaland", "Kylian Mbappé"], "correcta": "Lionel Messi"},
-    {"pregunta": "¿Cuál de estos equipos NO descendió nunca de la Primera División de Argentina?", "opciones": ["Boca Juniors", "River Plate", "Independiente"], "correcta": "Boca Juniors"},
-    {"pregunta": "¿En qué club de España jugó Juan Román Riquelme además del Barcelona?", "opciones": ["Villarreal", "Sevilla", "Valencia"], "correcta": "Villarreal"},
-    {"pregunta": "¿Quién fue el máximo goleador del Mundial de Qatar 2022?", "opciones": ["Kylian Mbappé", "Lionel Messi", "Julián Álvarez"], "correcta": "Kylian Mbappé"},
-    {"pregunta": "¿Qué equipo argentino ganó más Copas Libertadores?", "opciones": ["Independiente", "Boca Juniors", "River Plate"], "correcta": "Independiente"},
-    {"pregunta": "¿Qué jugador argentino anotó dos goles en la final de la Champions 2010 con el Inter?", "opciones": ["Diego Milito", "Javier Zanetti", "Esteban Cambiasso"], "correcta": "Diego Milito"},
-    {"pregunta": "¿En qué año se inauguró el Estadio Alberto J. Armando (La Bombonera)?", "opciones": ["1940", "1950", "1931"], "correcta": "1940"},
-    {"pregunta": "¿Cuál fue el resultado de la final del Mundial Alemania 2006 en los 120 minutos?", "opciones": ["1-1", "0-0", "2-1"], "correcta": "1-1"},
-    {"pregunta": "¿Qué futbolista es conocido mundialmente como 'O Rei'?", "opciones": ["Pelé", "Maradona", "Ronaldinho"], "correcta": "Pelé"},
-    {"pregunta": "¿Qué país ganó la primera Copa Mundial de la FIFA en 1930?", "opciones": ["Uruguay", "Argentina", "Brasil"], "correcta": "Uruguay"},
-    {"pregunta": "¿Quién es el máximo goleador histórico de los mundiales?", "opciones": ["Miroslav Klose", "Ronaldo Nazário", "Gerd Müller"], "correcta": "Miroslav Klose"},
-    {"pregunta": "¿Qué club inglés tiene más títulos de la UEFA Champions League?", "opciones": ["Liverpool", "Manchester United", "Chelsea"], "correcta": "Liverpool"},
-    {"pregunta": "¿Quién ganó la Eurocopa en el año 2024?", "opciones": ["España", "Inglaterra", "Francia"], "correcta": "España"},
-    {"pregunta": "In qué club francés jugó Lionel Messi tras salir del Barcelona?", "opciones": ["PSG", "Marsella", "Mónaco"], "correcta": "PSG"},
-    {"pregunta": "¿Qué país organizó el Mundial de fútbol de 1978?", "opciones": ["Argentina", "Brasil", "México"], "correcta": "Argentina"},
-    {"pregunta": "¿Cómo se llama el trofeo que se entrega al campeón de la liga española?", "opciones": ["Trofeo de LaLiga", "Copa del Rey", "Copa de la Reina"], "correcta": "Trofeo de LaLiga"},
-    {"pregunta": "In qué país se juega el clásico entre Celtic y Rangers?", "opciones": ["Escocia", "Irlanda", "Gales"], "correcta": "Escocia"},
-    {"pregunta": "¿Qué club de fútbol argentino es conocido como 'La Academia'?", "opciones": ["Racing Club", "San Lorenzo", "Estudiantes"], "correcta": "Racing Club"},
-    {"pregunta": "¿Qué número de camiseta usaba Zinedine Zidane en el Real Madrid?", "opciones": ["5", "10", "7"], "correcta": "5"},
-    {"pregunta": "¿Quién es el dueño del arco de la Selección Argentina apodado 'Dibu'?", "opciones": ["Emiliano Martínez", "Franco Armani", "Gerónimo Rulli"], "correcta": "Emiliano Martínez"},
-    {"pregunta": "¿Qué equipo italiano es conocido popularmente como 'La Vecchia Signora'?", "opciones": ["Juventus", "AC Milan", "Inter"], "correcta": "Juventus"},
-    {"pregunta": "¿En qué ciudad de Estados Unidos juega actualmente Lionel Messi?", "opciones": ["Miami", "Los Angeles", "New York"], "correcta": "Miami"},
-    {"pregunta": "¿Qué selección nacional eliminó a Argentina en el Mundial de Rusia 2018?", "opciones": ["Francia", "Croacia", "Nigeria"], "correcta": "Francia"},
-    {"pregunta": "¿Cuál es el apodo oficial de la Selección de fútbol de Uruguay?", "opciones": ["La Celeste", "La Charrúa", "La Garra"], "correcta": "La Celeste"},
-    {"pregunta": "¿Qué club alemán juega sus partidos de local en el Allianz Arena?", "opciones": ["Bayern Múnich", "Borussia Dortmund", "Bayer Leverkusen"], "correcta": "Bayern Múnich"},
-    {"pregunta": "¿Quién ganó la Copa América celebrada en el año 2021?", "opciones": ["Argentina", "Brasil", "Colombia"], "correcta": "Argentina"},
-    {"pregunta": "¿Cómo le dicen popularmente al club argentino Rosario Central?", "opciones": ["El Canalla", "El Leproso", "El Pincha"], "correcta": "El Canalla"},
-    {"pregunta": "¿Qué selección ganó el Mundial de Sudáfrica 2010?", "opciones": ["España", "Países Bajos", "Alemania"], "correcta": "España"},
-    {"pregunta": "¿Quién es el jugador con más partidos disputados en la historia de los Mundiales?", "opciones": ["Lionel Messi", "Lothar Matthäus", "Miroslav Klose"], "correcta": "Lionel Messi"},
-    {"pregunta": "¿Qué club del fútbol argentino juega en el Estadio Libertadores de América?", "opciones": ["Independiente", "Racing", "Arsenal"], "correcta": "Independiente"}
+    {"pregunta": "¿Cuál fue el resultado final tras los 120 minutos en la final de Qatar 2022 antes de los penales?", "opciones": ["3-3", "2-2", "4-4"], "correcta": "3-3"},
+    {"pregunta": "¿Qué jugador argentino anotó el primer gol de la final de Qatar 2022 de penal?", "opciones": ["Lionel Messi", "Ángel Di María", "Julián Álvarez"], "correcta": "Lionel Messi"},
+    {"pregunta": "¿Quién anotó un Hat-Trick para Francia en la final de Qatar 2022?", "opciones": ["Kylian Mbappé", "Antoine Griezmann", "Olivier Giroud"], "correcta": "Kylian Mbappé"},
+    {"pregunta": "¿Qué arquero ganó el Guante de Oro tras su icónica atajada a Kolo Muani en el último minuto?", "opciones": ["Emiliano Martínez", "Hugo Lloris", "Yassine Bounou"], "correcta": "Emiliano Martínez"},
+    {"pregunta": "¿Qué jugador anotó el penal definitivo que consagró campeona a Argentina?", "opciones": ["Gonzalo Montiel", "Leandro Paredes", "Paulo Dybala"], "correcta": "Gonzalo Montiel"},
+    {"pregunta": "¿Quién asistió a Ángel Di María para el segundo gol argentino en una contra perfecta?", "opciones": ["Alexis Mac Allister", "Lionel Messi", "Rodrigo de Paul"], "correcta": "Alexis Mac Allister"},
+    {"pregunta": "¿En qué estadio se disputó la gran final entre Argentina y Francia?", "opciones": ["Estadio de Lusail", "Estadio Al Bayt", "Estadio Al Thumama"], "correcta": "Estadio de Lusail"},
+    {"pregunta": "¿Quién era el director técnico de la Selección Argentina en Qatar 2022?", "opciones": ["Lionel Scaloni", "Gerardo Martino", "Jorge Sampaoli"], "correcta": "Lionel Scaloni"},
+    {"pregunta": "¿Cuántos penales atajó el 'Dibu' Martínez en la tanda definitoria de la final?", "opciones": ["1", "2", "3"], "correcta": "1"},
+    {"pregunta": "¿Qué jugador francés desvió su tiro penal afuera en la tanda de penales?", "opciones": ["Aurélien Tchouaméni", "Kingsley Coman", "Randal Kolo Muani"], "correcta": "Aurélien Tchouaméni"},
+    {"pregunta": "¿En qué año se disputó el Mundial de Qatar?", "opciones": ["2022", "2018", "2020"], "correcta": "2022"},
+    {"pregunta": "¿Qué jugador francés usa la camiseta número 10?", "opciones": ["Kylian Mbappé", "Antoine Griezmann", "Olivier Giroud"], "correcta": "Kylian Mbappé"},
+    {"pregunta": "¿Quién abrió la tanda de penales para Argentina en la final?", "opciones": ["Lionel Messi", "Paulo Dybala", "Leandro Paredes"], "correcta": "Lionel Messi"},
+    {"pregunta": "¿Quién fue elegido el mejor jugador joven del Mundial Qatar 2022?", "opciones": ["Enzo Fernández", "Julián Álvarez", "Aurélien Tchouaméni"], "correcta": "Enzo Fernández"},
+    {"pregunta": "¿Qué jugador argentino juega con la camiseta número 11?", "opciones": ["Ángel Di María", "Lionel Messi", "Lautaro Martínez"], "correcta": "Ángel Di María"},
+    {"pregunta": "¿Qué selección africana eliminó a Portugal y llegó a semis?", "opciones": ["Marruecos", "Camerún", "Senegal"], "correcta": "Marruecos"},
+    {"pregunta": "¿Qué país se quedó con el tercer puesto en Qatar 2022?", "opciones": ["Croacia", "Marruecos", "Francia"], "correcta": "Croacia"},
+    {"pregunta": "¿Contra qué selección debutó Argentina perdiendo 2-1?", "opciones": ["Arabia Saudita", "México", "Polonia"], "correcta": "Arabia Saudita"},
+    {"pregunta": "¿Quién metió el golazo de tiro libre de Países Bajos en el último minuto de descuento contra Argentina?", "opciones": ["Wout Weghorst", "Memphis Depay", "Virgil van Dijk"], "correcta": "Wout Weghorst"},
+    {"pregunta": "¿Qué jugador argentino asistió a Nahuel Molina contra Países Bajos sin mirar?", "opciones": ["Lionel Messi", "Ángel Di María", "Enzo Fernández"], "correcta": "Lionel Messi"},
+    {"pregunta": "¿Cuántas Copas del Mundo tiene la Selección Argentina con la de 2022?", "opciones": ["3", "2", "4"], "correcta": "3"},
+    {"pregunta": "¿Qué selección defendía el título de campeón en Qatar 2022?", "opciones": ["Francia", "Alemania", "Brasil"], "correcta": "Francia"},
+    {"pregunta": "¿En qué mes se jugó la final de Qatar 2022?", "opciones": ["Diciembre", "Julio", "Junio"], "correcta": "Diciembre"},
+    {"pregunta": "¿Quién metió el primer gol de Argentina en la semifinal contra Croacia?", "opciones": ["Lionel Messi", "Julián Álvarez", "Rodrigo de Paul"], "correcta": "Lionel Messi"},
+    {"pregunta": "¿Cuántos goles hizo Julián Álvarez en la semifinal contra Croacia?", "opciones": ["2", "1", "3"], "correcta": "2"},
+    {"pregunta": "¿Qué marca de ropa vistió a la Selección Argentina campeona en 2022?", "opciones": ["Adidas", "Nike", "Puma"], "correcta": "Adidas"},
+    {"pregunta": "¿Qué jugador polaco, delantero del Barcelona, enfrentó a Argentina en fase de grupos?", "opciones": ["Robert Lewandowski", "Arkadiusz Milik", "Piotr Zieliński"], "correcta": "Robert Lewandowski"},
+    {"pregunta": "¿Quién metió el segundo gol de Argentina contra México desde afuera del área?", "opciones": ["Enzo Fernández", "Lionel Messi", "Alexis Mac Allister"], "correcta": "Enzo Fernández"},
+    {"pregunta": "¿Quién era el capitán de la Selección de Francia en la final?", "opciones": ["Hugo Lloris", "Raphaël Varane", "Antoine Griezmann"], "correcta": "Hugo Lloris"},
+    {"pregunta": "¿A qué selección eliminó Francia en las semifinales de Qatar 2022?", "opciones": ["Marruecos", "Inglaterra", "Polonia"], "correcta": "Marruecos"},
+    {"pregunta": "¿Qué jugador argentino fue expulsado en el torneo?", "opciones": ["Ninguno", "Leandro Paredes", "Marcos Acuña"], "correcta": "Ninguno"},
+    {"pregunta": "¿Qué número usó Julián Álvarez en Qatar 2022?", "opciones": ["9", "22", "19"], "correcta": "9"},
+    {"pregunta": "¿Quién hizo el gol de la victoria 2-1 de Argentina contra Australia en octavos?", "opciones": ["Julián Álvarez", "Lionel Messi", "Enzo Fernández"], "correcta": "Julián Álvarez"},
+    {"pregunta": "¿Qué árbitro dirigió la final de Qatar 2022 entre Argentina y Francia?", "opciones": ["Szymon Marciniak", "Mateu Lahoz", "Wilton Sampaio"], "correcta": "Szymon Marciniak"},
+    {"pregunta": "¿Qué jugador francés de la final jugaba en el Atlético de Madrid?", "opciones": ["Antoine Griezmann", "Ousmane Dembélé", "Adrien Rabiot"], "correcta": "Antoine Griezmann"},
+    {"pregunta": "¿Cuál era el nombre de la pelota oficial de las semifinales y la final?", "opciones": ["Al Hilm", "Al Rihla", "Jabulani"], "correcta": "Al Hilm"},
+    {"pregunta": "¿Cuántos goles totales hizo Lionel Messi en el Mundial de Qatar 2022?", "opciones": ["7", "8", "6"], "correcta": "7"},
+    {"pregunta": "¿Quién ganó el premio al Balón de Oro como mejor jugador del torneo?", "opciones": ["Lionel Messi", "Kylian Mbappé", "Luka Modrić"], "correcta": "Lionel Messi"},
+    {"pregunta": "¿Qué jugador de Francia fue reemplazado en el primer tiempo de la final?", "opciones": ["Olivier Giroud", "Antoine Griezmann", "Kylian Mbappé"], "correcta": "Olivier Giroud"},
+    {"pregunta": "¿Cuál fue el resultado de la tanda de penales a favor de Argentina en la final?", "opciones": ["4-2", "3-1", "4-3"], "correcta": "4-2"}
 ]
 
-def obtener_datos_futbol_real():
-    url_base = "https://api-sports.io"
+def obtener_datos_final_mundo():
+    # CORRECCIÓN: Usamos la URL y Host de RapidAPI autorizados para saltar el Firewall perimetral
+    url_base = "https://rapidapi.com"
     headers = {
-        "x-rapidapi-host": "v3.football.api-sports.io",
-        "x-rapidapi-key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
-        "x-apisports-key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
+        "X-RapidAPI-Host": "://rapidapi.com",
+        "X-RapidAPI-Key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
-    datos_futbol = {"goleadores": []}
+    datos_partido = {"detalles": {}, "eventos": []}
     
-    print("[DIAGNÓSTICO] ---> Llamando a API-Football...")
+    print("[DIAGNÓSTICO] ---> 1. Llamando a API-Football mediante pasarela RapidAPI...")
     try:
-        url_goleadores = f"{url_base}/players/topscorers?league=128&season=2024"
-        res = requests.get(url_goleadores, headers=headers, timeout=5)
+        url_fixture = f"{url_base}/fixtures?id=970030"
+        res = requests.get(url_fixture, headers=headers, timeout=5)
         
         print(f"[DIAGNÓSTICO] API-Football respondió con Código HTTP: {res.status_code}")
         
         if res.status_code == 200:
             datos_json = res.json()
-            if "response" in datos_json and isinstance(datos_json["response"], list):
-                for item in datos_json["response"][:10]:
-                    player = item.get("player", {})
-                    stats = item.get("statistics", [{}]) if item.get("statistics") else {}
-                    datos_futbol["goleadores"].append({
-                        "nombre": player.get("name", "Desconocido"),
-                        "equipo": stats.get("team", {}).get("name", "Desconocido")
+            if "response" in datos_json and len(datos_json["response"]) > 0:
+                partido = datos_json["response"][0]
+                
+                datos_partido["detalles"] = {
+                    "local": partido["teams"]["home"]["name"],
+                    "visitante": partido["teams"]["away"]["name"],
+                    "goles_local": partido["goals"]["home"],
+                    "goles_visitante": partido["goals"]["away"],
+                    "estadio": partido["fixture"]["venue"]["name"],
+                    "arbitro": partido["fixture"]["referee"]
+                }
+                
+                for evento in partido.get("events", [])[:20]:
+                    datos_partido["eventos"].append({
+                        "tiempo": evento["time"]["elapsed"],
+                        "equipo": evento["team"]["name"],
+                        "jugador": evento["player"]["name"] if evento.get("player") else "Desconocido",
+                        "tipo": evento["type"],
+                        "detalle": evento["detail"]
                     })
-                print(f"[DIAGNÓSTICO] API-Football exitosa. {len(datos_futbol['goleadores'])} goleadores extraídos.")
+                print(f"[DIAGNÓSTICO] API-Football exitosa. Se guardó el JSON con {len(datos_partido['eventos'])} eventos del partido.")
+        else:
+            print(f"[ALERTA API-FÚTBOL] Error de red en la pasarela: {res.status_code}")
+            
     except Exception as e:
-        print(f"[ALERTA API-FÚTBOL] Error de conexión: {e}")
+        print(f"[ALERTA API-FÚTBOL] Excepción de conexión: {e}")
         
-    return datos_futbol
+    return datos_partido
 
 app = FastAPI()
 
@@ -108,7 +125,7 @@ async def obtener_interfaz(request: Request):
 async def obtener_trivias_http():
     print("\n================== NUEVA PETICIÓN DE TRIVIA ==================")
     
-    # CORRECCIÓN DE UNBOUNDLOCALERROR: Declaramos el loop al inicio absoluto de la función
+    # Declaramos las variables locales al inicio de la función de forma segura
     loop = asyncio.get_running_loop()
     contexto_mundial = {"detalles": {}, "eventos": []}
     
@@ -118,15 +135,15 @@ async def obtener_trivias_http():
         random.shuffle(copia_respaldo)
         return {"preguntas": copia_respaldo}
 
-    # 1. Consumir el JSON real del partido desde la API de Fútbol usando el executor
+    # 1. Consumir el JSON real de la final usando el executor asíncrono
     try:
         contexto_mundial = await loop.run_in_executor(None, obtener_datos_final_mundo)
     except Exception as e:
-        print(f"[ALERTA LOOP] Falló el ejecutor asíncrono para fútbol: {e}")
+        print(f"[ALERTA LOOP] Error en executor asíncrono: {e}")
     
-    # Datos de resguardo si la API de fútbol falla o viene vacía
+    # Resguardo integrado por si tu plan gratuito de la API no tiene requests disponibles
     if not contexto_mundial or not contexto_mundial.get("detalles"):
-        print("[DIAGNÓSTICO] La API de fútbol no retornó datos. Usando JSON real de respaldo de la Final.")
+        print("[DIAGNÓSTICO] Usando JSON real de respaldo de la Final de Qatar 2022.")
         contexto_mundial = {
             "detalles": {"local": "Argentina", "visitante": "Francia", "goles_local": 3, "goles_visitante": 3, "estadio": "Lusail Iconic Stadium", "arbitro": "Szymon Marciniak"},
             "eventos": [
@@ -150,7 +167,7 @@ async def obtener_trivias_http():
         prompt_sistema = (
             "Sos un historiador deportivo experto en Copas del Mundo. Tu única tarea es responder con un objeto JSON válido. "
             "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
-            "No devuelvas bloques Markdown (```json) ni texto extra."
+            "No devuelvas bloques Markdown (```json) ni texto explicativo extra."
         )
         prompt_usuario = (
             f"Basándote estrictamente en este JSON con datos reales de la Final de Qatar 2022 extraídos de la API: {json.dumps(contexto_mundial, ensure_ascii=False)}. "
@@ -190,7 +207,8 @@ async def obtener_trivias_http():
     except Exception as e:
         print(f"[ALERTA GROK] Error crítico de procesamiento: {e}")
     
-    print("[SERVER] Flujo fallido. Entregando el mazo por defecto temático de Qatar 2022.")
+    print("[SERVER] Flujo terminado. Entregando el mazo por defecto temático de Qatar 2022.")
     copia_respaldo = list(BANCO_RESPALDO)
     random.shuffle(copia_respaldo)
     return {"preguntas": copia_respaldo}
+
