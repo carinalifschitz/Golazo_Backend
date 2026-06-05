@@ -107,133 +107,54 @@
             <div id="box-question" class="question"></div>
             <div id="box-options"></div>
             <div id="box-feedback" class="feedback"></div>
-            <button id="btn-next-action" class="btn btn-next" onclick="solicitarPreguntaIndividual()">Siguiente Pregunta ➡️</button>
+            <button id="btn-next-action" class="btn btn-next" onclick="avanzarPreguntaLocal()">Siguiente Pregunta ➡️</button>
         </div>
 
         <!-- RANKING -->
         <div class="ranking">
             <h3>🏆 Posiciones</h3>
-            <ul id="rank-list" class="ranking-list"></ul>
+            <ul id="rank-list" class="ranking-list">
+                <li class="ranking-item"><span>Jugador Local</span><span id="local-score">0 pts</span></li>
+            </ul>
         </div>
     </div>
 
     <script>
-        const URL_WS = "ws://localhost:8765";
+        // ENRUTAMIENTO DINÁMICO: Detecta si está en producción (Render) o en local y arma la URL del WebSocket
+        const protocolo = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const hostServidor = window.location.host ? window.location.host : "://onrender.com";
+        const URL_WS = protocolo + hostServidor + "/ws";
+
         let socket;
         let salaId = "";
         let modoEsMultijugador = false;
+        let servidorConectado = false;
 
-        function iniciarConexion() {
-            socket = new WebSocket(URL_WS);
-            socket.onopen = () => {
-                document.getElementById("net-status").textContent = "Conectado";
-                document.getElementById("net-status").style.color = "var(--success)";
-            };
-            socket.onclose = () => {
-                document.getElementById("net-status").textContent = "Desconectado";
-                document.getElementById("net-status").style.color = "var(--error)";
-                setTimeout(iniciarConexion, 2000);
-            };
-            socket.onmessage = (e) => {
-                const res = JSON.parse(e.data);
-                
-                if (res.tipo === "status") {
-                    cambiarPantalla("scr-wait");
-                    document.getElementById("wait-msg").textContent = res.mensaje;
-                }
-                else if (res.tipo === "trivia" || res.tipo === "inicio_multijugador") {
-                    salaId = res.id_sala || "";
-                    modoEsMultijugador = (res.tipo === "inicio_multijugador");
-                    document.getElementById("room").textContent = salaId ? `Sala: ${salaId}` : "";
-                    renderizarPregunta(res.datos);
-                }
-                else if (res.tipo === "resultado") {
-                    renderizarFeedback(res.correcto);
-                    renderizarRanking(res.ranking_global);
-                }
-                else if (res.tipo === "fin_partida") {
-                    cambiarPantalla("scr-wait");
-                    document.getElementById("wait-msg").innerHTML = `🏁 Partida Terminada<br><br>Ganador: <strong>${res.ganador}</strong>`;
-                    renderizarRanking(res.ranking_global);
-                }
-            };
-        }
-
-        function solicitarPreguntaIndividual() {
-            modoEsMultijugador = false;
-            salaId = "";
-            socket.send(JSON.stringify({ accion: "jugar_individual" }));
-        }
-
-        function buscarMatch() {
-            socket.send(JSON.stringify({ accion: "buscar_partida_multijugador" }));
-        }
-
-        function responder(opcion) {
-            document.querySelectorAll(".btn-option").forEach(b => b.disabled = true);
-            
-            socket.send(JSON.stringify({
-                accion: "responder",
-                id_sala: salaId,
-                eleccion: opcion
-            }));
-        }
-
-        function renderizarPregunta(datos) {
-            cambiarPantalla("scr-trivia");
-            document.getElementById("box-feedback").textContent = "";
-            document.getElementById("box-feedback").className = "feedback";
-            document.getElementById("btn-next-action").style.display = "none";
-
-            document.getElementById("box-question").textContent = datos.pregunta;
-            const contenedor = document.getElementById("box-options");
-            contenedor.innerHTML = "";
-
-            datos.opciones.forEach(opt => {
-                const btn = document.createElement("button");
-                btn.className = "btn btn-option";
-                btn.textContent = opt;
-                btn.onclick = () => responder(opt);
-                contenedor.appendChild(btn);
-            });
-        }
-
-        function renderizarFeedback(correcto) {
-            const f = document.getElementById("box-feedback");
-            if (correcto) {
-                f.textContent = "¡Respuesta Correcta! (+100 pts)";
-                f.className = "feedback correct";
-            } else {
-                f.textContent = "Respuesta Incorrecta ❌";
-                f.className = "feedback incorrect";
-            }
-
-            if (!modoEsMultijugador) {
-                document.getElementById("btn-next-action").style.display = "block";
-            }
-        }
-
-        function renderizarRanking(global) {
-            const lista = document.getElementById("rank-list");
-            lista.innerHTML = "";
-            Object.entries(global)
-                .sort((a,b) => b - a)
-                .forEach(([user, pts]) => {
-                    lista.innerHTML += `<li class="ranking-item"><span>👤 ${user}</span><strong>${pts} pts</strong></li>`;
-                });
-        }
-
-        function cambiarPantalla(id) {
-            document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-            document.getElementById(id).classList.add("active");
-        }
-
-        function cancelar() {
-            if(socket) socket.close();
-            cambiarPantalla("scr-menu");
-        }
-
-        window.onload = iniciarConexion;
-    </script>
-</body>
-</html>
+        // --- BANCO NATIVO DE RESPALDO (40 PREGUNTAS EN CASO DE FALLA) ---
+        const BANCO_TRIVIAS = [
+            {"pregunta": "¿Qué equipo se consagró campeón del mundo de clubes al vencer al Real Madrid en el año 2000?", "opciones": ["Boca Juniors", "River Plate", "Palmeiras"], "correcta": "Boca Juniors"},
+            {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"},
+            {"pregunta": "¿En qué club europeo debutó profesionalmente Sergio 'Kun' Agüero?", "opciones": ["Atlético de Madrid", "Manchester City", "Barcelona"], "correcta": "Atlético de Madrid"},
+            {"pregunta": "¿Quién fue el director técnico de la Selección Argentina en el Mundial de Sudáfrica 2010?", "opciones": ["Diego Maradona", "Alejandro Sabella", "Alfio Basile"], "correcta": "Diego Maradona"},
+            {"pregunta": "¿Qué país organizó y ganó el Mundial de fútbol de 1998?", "opciones": ["Francia", "Brasil", "Italia"], "correcta": "Francia"},
+            {"pregunta": "¿Cuál es el estadio de fútbol con mayor capacidad de espectadores en Sudamérica?", "opciones": ["Estadio Mâs Monumental", "Estadio Maracaná", "Estadio Centenario"], "correcta": "Estadio Mâs Monumental"},
+            {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' en 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
+            {"pregunta": "¿Qué club de la Liga Argentina es conocido popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
+            {"pregunta": "¿Quién ganó el Balón de Oro de la FIFA en el año 2023?", "opciones": ["Lionel Messi", "Erling Haaland", "Kylian Mbappé"], "correcta": "Lionel Messi"},
+            {"pregunta": "¿Cuál de estos equipos NO descendió nunca de la Primera División de Argentina?", "opciones": ["Boca Juniors", "River Plate", "Independiente"], "correcta": "Boca Juniors"},
+            {"pregunta": "¿En qué club de España jugó el mediocampista Juan Román Riquelme además del Barcelona?", "opciones": ["Villarreal", "Sevilla", "Valencia"], "correcta": "Villarreal"},
+            {"pregunta": "¿Quién fue el goleador del Mundial de Qatar 2022?", "opciones": ["Kylian Mbappé", "Lionel Messi", "Julián Álvarez"], "correcta": "Kylian Mbappé"},
+            {"pregunta": "¿Qué equipo del fútbol argentino tiene el récord de más campeonatos de Copa Libertadores ganados?", "opciones": ["Independiente", "Boca Juniors", "Estudiantes de La Plata"], "correcta": "Independiente"},
+            {"pregunta": "¿Qué jugador argentino ganó la Champions League con el Inter de Milán anotando dos goles en la final de 2010?", "opciones": ["Diego Milito", "Javier Zanetti", "Esteban Cambiasso"], "correcta": "Diego Milito"},
+            {"pregunta": "¿En qué año se inauguró el actual Estadio Alberto J. Armando, conocido como La Bombonera?", "opciones": ["1940", "1950", "1931"], "correcta": "1940"},
+            {"pregunta": "¿Cuál fue el resultado de la final del Mundial de Alemania 2006 entre Italia y Francia en los 120 minutos?", "opciones": ["1-1", "0-0", "2-1"], "correcta": "1-1"},
+            {"pregunta": "¿Qué futbolista es conocido mundialmente como 'O Rei'?", "opciones": ["Pelé", "Garrincha", "Ronaldinho"], "correcta": "Pelé"},
+            {"pregunta": "¿Quién es el director técnico actual de la Selección Mayor de Argentina?", "opciones": ["Lionel Scaloni", "Jorge Sampaoli", "Gerardo Martino"], "correcta": "Lionel Scaloni"},
+            {"pregunta": "¿Qué club inglés es conocido como los 'Red Devils'?", "opciones": ["Manchester United", "Liverpool", "Arsenal"], "correcta": "Manchester United"},
+            {"pregunta": "¿En qué club de la MLS juega actualmente el capitán argentino Lionel Messi?", "opciones": ["Inter Miami", "LA Galaxy", "New York City FC"], "correcta": "Inter Miami"},
+            {"pregunta": "¿Qué número de camiseta usó principalmente Ángel Di María en la Selección Argentina?", "opciones": ["11", "7", "10"], "correcta": "11"},
+            {"pregunta": "¿Contra qué país debutó oficialmente Diego Maradona en un Mundial de Fútbol (España 1982)?", "opciones": ["Bélgica", "Hungría", "El Salvador"], "correcta": "Bélgica"},
+            {"pregunta": "¿Cuál de estos países ha ganado exactamente CUATRO copas mundiales de la FIFA?", "opciones": ["Alemania", "Brasil", "Argentina"], "correcta": "Alemania"},
+            {"pregunta": "¿Qué jugador pateó el penal decisivo contra Francia en la final del mundo de Qatar 2022?", "opciones": ["Gonzalo Montiel", "Leandro Paredes", "Lautaro Martínez"], "correcta": "Gonzalo Montiel"},
+            {"pregunta": "¿Qué histórico defensor argentino es apodado 'El Ratón'?", "opciones": ["Roberto Ayala", "Walter Samuel", "Gabriel Heinze"], "correcta": "Roberto Ayala"},
+            {"pregunta": "¿Qué club de fútbol de Córdoba es apodado 'El Pirata'?", "opciones": ["Belgrano", "Talleres", "Instituto"], "correcta": "Belgrano"},
