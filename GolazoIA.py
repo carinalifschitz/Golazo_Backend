@@ -82,7 +82,6 @@ def generar_trivia_de_partido(partido_raw):
             response_format={"type": "json_object"},
             temperature=0.65
         )
-        # CORREGIDO: Añadido el índice [0] obligatorio para la librería OpenAI
         return json.loads(completion.choices[0].message.content.strip())
     except Exception as e:
         print(f"[ERROR GENERANDO PREGUNTA DETALLADA]: {e}")
@@ -97,7 +96,6 @@ async def precargar_banco_trivias():
     if partidos:
         for i, partido in enumerate(partidos):
             print(f"[SISTEMA]: Procesando estadísticas del partido {i+1}/40 con Grok...")
-            # CORREGIDO: Eliminada la 'l' errónea del parámetro partido_raw
             trivia = generar_trivia_de_partido(partido)
             if trivia:
                 BANCO_TRIVIAS.append(trivia)
@@ -240,3 +238,6 @@ async def manejar_cliente(websocket):
             jugadores_esperando.remove(websocket)
 
 async def main():
+    asyncio.create_task(precargar_banco_trivias())
+    puerto = int(os.environ.get("PORT", 8765))
+    print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
