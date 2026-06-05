@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import os
 import requests
@@ -30,7 +31,7 @@ TRIVIA_RESPALDO = {
 }
 
 # ----------------------------------------------------------------
-# LÓGICA DE DATOS & INTELIGENCIA ARTIFICIAL (DATOS DETALLADOS)
+# LÓGICA DE DATOS & INTELIGENCIA ARTIFICIAL (HILO SEPARADO)
 # ----------------------------------------------------------------
 
 def consultar_api_futbol_masivo():
@@ -87,10 +88,10 @@ def generar_trivia_de_partido(partido_raw):
         print(f"[ERROR GENERANDO PREGUNTA DETALLADA]: {e}")
         return None
 
-async def precargar_banco_trivias():
-    """Bucle inicial que descarga los partidos y genera las 40 trivias."""
+def precargar_banco_trivias_sincrono():
+    """Ejecuta la descarga y procesamiento pesado en un hilo secundario."""
     global BANCO_TRIVIAS
-    print("[SISTEMA]: Iniciando descarga de 40 partidos detallados...")
+    print("[SISTEMA]: Iniciando descarga de 40 partidos detallados en segundo plano...")
     partidos = consultar_api_futbol_masivo()
     
     if partidos:
@@ -99,7 +100,8 @@ async def precargar_banco_trivias():
             trivia = generar_trivia_de_partido(partido)
             if trivia:
                 BANCO_TRIVIAS.append(trivia)
-            await asyncio.sleep(0.4)
+            # Pausa síncrona para no saturar las APIs
+            time.sleep(0.5)
             
     print(f"[SISTEMA]: Banco cargado con éxito. Total preguntas listas: {len(BANCO_TRIVIAS)}")
 
@@ -237,20 +239,23 @@ async def manejar_cliente(websocket):
         if websocket in jugadores_esperando:
             jugadores_esperando.remove(websocket)
 
-# Modifica tu función main para que quede así:
+# ----------------------------------------------------------------
+# FUNCIÓN DE INICIO PRINCIPAL
+# ----------------------------------------------------------------
+
 async def main():
-    # 1. Mantiene tu tarea en segundo plano para cargar las preguntas
-    asyncio.create_task(precargar_banco_trivias())
+    # Lanzamos la precarga pesada en un hilo paralelo para no congelar los websockets
+    loop = asyncio.get_running_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    loop.run_in_executor(executor, precargar_banco_trivias_sincrono)
     
-    # 2. Obtiene el puerto dinámico de Render
+    # Configuración de puerto para Render
     puerto = int(os.environ.get("PORT", 8765))
     print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
     
-    # 3. ¡ESTO ES LO QUE FALTA! Levanta el servidor usando la función manejar_cliente
-    async with websockets.serve(manejar_cliente, "0.0.0.0", puerto):
-        # Mantiene el servidor corriendo indefinidamente sin consumir CPU
-        await asyncio.Future() 
+    # Desactivamos restricciones de origen (origins=None) para permitir conexiones de prueba externas
+    async with websockets.serve(manejar_cliente, "0.0.0.0", puerto, origins=None):
+        await asyncio.Future()  # Mantiene el servidor escuchando para siempre
 
-# AGREGA ESTO AL FINAL DE TODO TU ARCHIVO:
 if __name__ == "__main__":
     asyncio.run(main())
