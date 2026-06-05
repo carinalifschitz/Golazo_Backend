@@ -3,7 +3,7 @@ import json
 import os
 import requests
 import random
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -104,14 +104,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/", response_class=HTMLResponse)
-async def obtener_interfaz():
+# --- RUTA 1: ENTRADA VISUAL (CORREGIDA: Soporta GET y HEAD para el Health Check de Render) ---
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def obtener_interfaz(request: Request):
     ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
     if os.path.exists(ruta_html):
         with open(ruta_html, "r", encoding="utf-8") as archivo:
             return HTMLResponse(content=archivo.read(), status_code=200)
     return HTMLResponse(content="<h1>⚽ Servidor Golazo IA Activo</h1>", status_code=200)
 
+# --- RUTA 2: PROCESAMIENTO DE TRIVIAS ---
 @app.get("/api/trivias")
 async def obtener_trivias_http():
     print("\n================== NUEVA PETICIÓN DE TRIVIA ==================")
