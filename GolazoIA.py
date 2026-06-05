@@ -237,7 +237,20 @@ async def manejar_cliente(websocket):
         if websocket in jugadores_esperando:
             jugadores_esperando.remove(websocket)
 
+# Modifica tu función main para que quede así:
 async def main():
+    # 1. Mantiene tu tarea en segundo plano para cargar las preguntas
     asyncio.create_task(precargar_banco_trivias())
+    
+    # 2. Obtiene el puerto dinámico de Render
     puerto = int(os.environ.get("PORT", 8765))
     print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
+    
+    # 3. ¡ESTO ES LO QUE FALTA! Levanta el servidor usando la función manejar_cliente
+    async with websockets.serve(manejar_cliente, "0.0.0.0", puerto):
+        # Mantiene el servidor corriendo indefinidamente sin consumir CPU
+        await asyncio.Future() 
+
+# AGREGA ESTO AL FINAL DE TODO TU ARCHIVO:
+if __name__ == "__main__":
+    asyncio.run(main())
