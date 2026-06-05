@@ -108,32 +108,38 @@ async def obtener_interfaz(request: Request):
 async def obtener_trivias_http():
     print("\n================== NUEVA PETICIÓN DE TRIVIA ==================")
     
+    # CORRECCIÓN DE UNBOUNDLOCALERROR: Declaramos el loop al inicio absoluto de la función
+    loop = asyncio.get_running_loop()
+    contexto_mundial = {"detalles": {}, "eventos": []}
+    
     if not GROK_API_KEY:
         print("[ALERTA GROK] La variable GROK_API_KEY está vacía en el panel de Render.")
         copia_respaldo = list(BANCO_RESPALDO)
         random.shuffle(copia_respaldo)
         return {"preguntas": copia_respaldo}
 
-    # 1. Declarar y ejecutar llamada asíncrona a la API de Fútbol de forma segura
-    contexto_futbol = {"goleadores": []}
+    # 1. Consumir el JSON real del partido desde la API de Fútbol usando el executor
     try:
-        loop = asyncio.get_running_loop()
-        contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+        contexto_mundial = await loop.run_in_executor(None, obtener_datos_final_mundo)
     except Exception as e:
-        print(f"[ALERTA LOOP] Falló el ejecutor asíncrono: {e}")
+        print(f"[ALERTA LOOP] Falló el ejecutor asíncrono para fútbol: {e}")
     
-    if not contexto_futbol.get("goleadores"):
-        print("[DIAGNÓSTICO] API-Football vacía/fallida. Armando datos ficticios de control para Grok.")
-        contexto_futbol = {
-            "goleadores": [
-                {"nombre": "Miguel Borja", "equipo": "River Plate"},
-                {"nombre": "Edinson Cavani", "equipo": "Boca Juniors"},
-                {"nombre": "Adrian Martinez", "equipo": "Racing Club"},
-                {"nombre": "Walter Bou", "equipo": "Lanús"}
+    # Datos de resguardo si la API de fútbol falla o viene vacía
+    if not contexto_mundial or not contexto_mundial.get("detalles"):
+        print("[DIAGNÓSTICO] La API de fútbol no retornó datos. Usando JSON real de respaldo de la Final.")
+        contexto_mundial = {
+            "detalles": {"local": "Argentina", "visitante": "Francia", "goles_local": 3, "goles_visitante": 3, "estadio": "Lusail Iconic Stadium", "arbitro": "Szymon Marciniak"},
+            "eventos": [
+                {"tiempo": 23, "equipo": "Argentina", "jugador": "Lionel Messi", "tipo": "Goal", "detalle": "Penalty"},
+                {"tiempo": 36, "equipo": "Argentina", "jugador": "Ángel Di María", "tipo": "Goal", "detalle": "Normal Goal"},
+                {"tiempo": 80, "equipo": "Francia", "jugador": "Kylian Mbappé", "tipo": "Goal", "detalle": "Penalty"},
+                {"tiempo": 81, "equipo": "Francia", "jugador": "Kylian Mbappé", "tipo": "Goal", "detalle": "Normal Goal"},
+                {"tiempo": 108, "equipo": "Argentina", "jugador": "Lionel Messi", "tipo": "Goal", "detalle": "Normal Goal"},
+                {"tiempo": 118, "equipo": "Francia", "jugador": "Kylian Mbappé", "tipo": "Goal", "detalle": "Penalty"}
             ]
         }
 
-    # 2. Ejecutar llamada a Grok
+    # 2. Mandar ese JSON extraído directo al prompt de Grok-2
     try:
         url_grok = "https://x.ai"
         headers_grok = {
@@ -142,18 +148,19 @@ async def obtener_trivias_http():
         }
         
         prompt_sistema = (
-            "Sos un experto en fútbol. Tu única tarea es responder con un objeto JSON válido. "
+            "Sos un historiador deportivo experto en Copas del Mundo. Tu única tarea es responder con un objeto JSON válido. "
             "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
-            "No devuelvas bloques Markdown ni texto extra."
+            "No devuelvas bloques Markdown (```json) ni texto extra."
         )
         prompt_usuario = (
-            f"Basándote en estos datos de goleadores actuales: {json.dumps(contexto_futbol, ensure_ascii=False)}. "
-            "Generá un array de exactamente 40 preguntas de trivia con estructura de objeto JSON: "
-            "pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una opción)."
+            f"Basándote estrictamente en este JSON con datos reales de la Final de Qatar 2022 extraídos de la API: {json.dumps(contexto_mundial, ensure_ascii=False)}. "
+            "Generá un array de exactamente 40 preguntas de trivia variadas sobre este partido. "
+            "Muchas preguntas deben interrogar sobre los minutos exactos de los goles, quién los metió, el árbitro, el estadio y los detalles provistos en el JSON. "
+            "Estructura requerida por objeto del array: pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una opción)."
         )
 
         payload = {
-            "model": "grok-2",
+            "model": "grok-2", 
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": prompt_sistema},
@@ -162,7 +169,7 @@ async def obtener_trivias_http():
             "temperature": 0.7
         }
 
-        print("[DIAGNÓSTICO] ---> Enviando datos al servidor de Grok (x.ai)...")
+        print("[DIAGNÓSTICO] ---> 2. Enviando JSON del partido al servidor de Grok (x.ai)...")
         res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=15)
         
         print(f"[DIAGNÓSTICO] Grok respondió con Código HTTP: {res.status_code}")
@@ -173,7 +180,7 @@ async def obtener_trivias_http():
             datos_finales = json.loads(texto_json)
             
             if "preguntas" in datos_finales and len(datos_finales["preguntas"]) > 0:
-                print(f"[DIAGNÓSTICO] ¡Éxito total! Grok leyó los datos y armó {len(datos_finales['preguntas'])} preguntas dinámicas.")
+                print(f"[DIAGNÓSTICO] ¡Éxito total! Grok leyó el JSON de la API y armó {len(datos_finales['preguntas'])} preguntas dinámicas.")
                 preguntas_mezcladas = datos_finales["preguntas"]
                 random.shuffle(preguntas_mezcladas)
                 return {"preguntas": preguntas_mezcladas}
@@ -183,7 +190,7 @@ async def obtener_trivias_http():
     except Exception as e:
         print(f"[ALERTA GROK] Error crítico de procesamiento: {e}")
     
-    print("[SERVER] Flujo de IA bloqueado por red. Entregando el mazo por defecto.")
+    print("[SERVER] Flujo fallido. Entregando el mazo por defecto temático de Qatar 2022.")
     copia_respaldo = list(BANCO_RESPALDO)
     random.shuffle(copia_respaldo)
     return {"preguntas": copia_respaldo}
