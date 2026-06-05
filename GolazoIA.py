@@ -22,55 +22,83 @@ BANCO_TRIVIAS = []
 jugadores_esperando = []  
 salas_activas = {}       
 
+# Banco de emergencias garantizado: Si todo falla, este lote mantiene tu app viva.
 BANCO_RESPALDO = [
     {"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"},
     {"pregunta": "¿Quién es el máximo goleador de la Selección Argentina?", "opciones": ["Messi", "Maradona", "Batistuta"], "correcta": "Messi"},
-    {"pregunta": "¿Cuál es el estadio de Boca Juniors?", "opciones": ["La Bombonera", "El Monumental", "El Cilindro"], "correcta": "La Bombonera"}
+    {"pregunta": "¿Cuál es el estadio de Boca Juniors?", "opciones": ["La Bombonera", "El Monumental", "El Cilindro"], "correcta": "La Bombonera"},
+    {"pregunta": "¿Qué equipo tiene más Copas Libertadores?", "opciones": ["Independiente", "Boca", "River"], "correcta": "Independiente"}
 ]
 
 def obtener_datos_futbol_real():
-    url_base = "https://api-sports.io"
+    url_base = "https://v3.football.api-sports.io"
+    # CORRECCIÓN CLAVE: Se añaden ambas variantes de Headers para máxima compatibilidad con API-Football
     headers = {
         "x-rapidapi-host": "v3.football.api-sports.io",
-        "x-rapidapi-key": FOOTBALL_API_KEY
+        "x-rapidapi-key": FOOTBALL_API_KEY,
+        "x-apisports-key": FOOTBALL_API_KEY
     }
     datos_futbol = {"goleadores": [], "estadios": [], "partidos_jugados": []}
+    
+    # Usamos una temporada con datos garantizados (2024 o 2025 según liga) para evitar respuestas vacías
+    temporada = "2024" 
+    liga_id = "128" # Liga Profesional Argentina
+
+    # Sub-bloque 1: Goleadores
     try:
-        url_goleadores = f"{url_base}/players/topscorers?league=128&season=2026"
+        url_goleadores = f"{url_base}/players/topscorers?league={liga_id}&season={temporada}"
         res_goleadores = requests.get(url_goleadores, headers=headers, timeout=5).json()
-        if "response" in res_goleadores:
+        if "response" in res_goleadores and isinstance(res_goleadores["response"], list):
             for item in res_goleadores["response"][:12]:
-                player = item["player"]
-                stats_list = item["statistics"]
-                stats = stats_list if isinstance(stats_list, list) and len(stats_list) > 0 else stats_list
-                datos_futbol["goleadores"].append({
-                    "nombre": player["name"],
-                    "equipo": stats.get("team", {}).get("name", "Desconocido") if isinstance(stats, dict) else "Desconocido",
-                    "goles": stats.get("goals", {}).get("total", 0) if isinstance(stats, dict) else 0,
-                    "nacionalidad": player["nationality"]
-                })
+                player = item.get("player", {})
+                stats_list = item.get("statistics", [])
+                stats = stats_list[0] if isinstance(stats_list, list) and len(stats_list) > 0 else {}
                 
-        url_equipos = f"{url_base}/teams?league=128&season=2026"
-        res_equipos = requests.get(url_equipos, headers=headers, timeout=5).json()
-        if "response" in res_equipos:
-            for item in res_equipos["response"][:12]:
-                datos_futbol["estadios"].append({
-                    "equipo": item["team"]["name"],
-                    "estadio_nombre": item["venue"]["name"],
-                    "ciudad": item["venue"]["city"],
-                    "capacidad": item["venue"]["capacity"]
+                datos_futbol["goleadores"].append({
+                    "nombre": player.get("name", "Desconocido"),
+                    "equipo": stats.get("team", {}).get("name", "Desconocido"),
+                    "goles": stats.get("goals", {}).get("total", 0),
+                    "nacionalidad": player.get("nationality", "Desconocida")
                 })
     except Exception as e:
-        print(f"Error en API-Football: {e}")
+        print(f"Aviso: Falló la extracción de goleadores ({e})")
+
+    # Sub-bloque 2: Equipos y Estadios
+    try:
+        url_equipos = f"{url_base}/teams?league={liga_id}&season={temporada}"
+        res_equipos = requests.get(url_equipos, headers=headers, timeout=5).json()
+        if "response" in res_equipos and isinstance(res_equipos["response"], list):
+            for item in res_equipos["response"][:12]:
+                team = item.get("team", {})
+                venue = item.get("venue", {})
+                if team.get("name") and venue.get("name"):
+                    datos_futbol["estadios"].append({
+                        "equipo": team.get("name"),
+                        "estadio_nombre": venue.get("name"),
+                        "ciudad": venue.get("city", "Desconocida"),
+                        "capacidad": venue.get("capacity", 0)
+                    })
+    except Exception as e:
+        print(f"Aviso: Falló la extracción de estadios ({e})")
+
     return datos_futbol
 
 async def generar_banco_trivias_ai():
     global BANCO_TRIVIAS
     try:
+        print("Iniciando recolección de estadísticas...")
         loop = asyncio.get_running_loop()
         contexto = await loop.run_in_executor(None, obtener_datos_futbol_real)
-        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON con un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
-        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto)} Genera un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones, correcta."
+        
+        # Validar si logramos recolectar datos reales mínimos
+        if not contexto["goleadores"] and not contexto["estadios"]:
+            print("API-Football no retornó datos válidos. Saltando directo al banco de respaldo.")
+            BANCO_TRIVIAS = BANCO_RESPALDO
+            return
+
+        print("Enviando contexto a Grok...")
+        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON con un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown ni explicaciones."
+        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto, ensure_ascii=False)} Genera un array de exactamente 40 preguntas de trivia con la estructura exacta: pregunta, opciones, correcta."
         
         completion = await loop.run_in_executor(
             None,
@@ -78,20 +106,27 @@ async def generar_banco_trivias_ai():
                 model="grok-beta", 
                 response_format={"type": "json_object"},
                 messages=[{"role": "system", "content": prompt_sistema}, {"role": "user", "content": prompt_usuario}],
-                timeout=15
+                timeout=20
             )
         )
+        
         datos = json.loads(completion.choices.message.content)
-        if "preguntas" in datos:
+        if "preguntas" in datos and len(datos["preguntas"]) > 0:
+            # Forzar mezcla aleatoria del banco recibido
             BANCO_TRIVIAS = datos["preguntas"]
-            print(f"¡Éxito! Inyectadas {len(BANCO_TRIVIAS)} preguntas de IA.")
+            print(f"¡Éxito total! Inyectadas {len(BANCO_TRIVIAS)} preguntas dinámicas desde la IA.")
             return
+            
     except Exception as e:
-        print(f"Fallo en IA: {e}")
+        print(f"Error crítico controlado en el generador de IA: {e}")
+    
+    # Resguardo de seguridad inquebrantable
+    print("Inyectando banco de respaldo preventivo por fallas generales.")
     BANCO_TRIVIAS = BANCO_RESPALDO
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # La tarea corre en background absoluto para que Uvicorn asigne el puerto HTTP de inmediato en Render
     asyncio.create_task(generar_banco_trivias_ai())
     yield
 
@@ -105,7 +140,7 @@ async def obtener_interfaz():
             return HTMLResponse(content=archivo.read(), status_code=200)
     return HTMLResponse(content="<h1>⚽ Servidor Activo (Subiendo index.html...)</h1>", status_code=200)
 
-# --- WEBSOCKET MODIFICADO ---
+# --- SISTEMA WEBSOCKET UNIFICADO ---
 @app.websocket("/ws")
 async def endpoint_websocket(websocket: WebSocket):
     await websocket.accept()
@@ -117,8 +152,8 @@ async def endpoint_websocket(websocket: WebSocket):
             accion = mensaje.get("accion")
 
             if accion == "solicitar_individual":
-                # Mezclamos el banco disponible y enviamos el lote completo (máximo 40)
                 pool = BANCO_TRIVIAS if BANCO_TRIVIAS else BANCO_RESPALDO
+                # Selecciona aleatoriamente hasta 40 preguntas del set disponible
                 preguntas_mezcladas = random.sample(pool, min(40, len(pool)))
                 await websocket.send_text(json.dumps({
                     "tipo": "banco_individual", 
@@ -135,7 +170,6 @@ async def endpoint_websocket(websocket: WebSocket):
                     mi_sala = f"sala_{random.randint(1000, 9999)}"
                     
                     pool = BANCO_TRIVIAS if BANCO_TRIVIAS else BANCO_RESPALDO
-                    # Para el Versus Versus, mandamos 5 preguntas para que no sea eterno, o 40 si así lo preferís.
                     preguntas_partida = random.sample(pool, min(40, len(pool)))
                     
                     salas_activas[mi_sala] = {
@@ -175,4 +209,5 @@ async def endpoint_websocket(websocket: WebSocket):
                     await jugador.send_text(json.dumps({"tipo": "rival_desconectado"}))
                 except:
                     pass
-            del salas_activas[mi_sala]
+            if mi_sala in salas_activas:
+                del salas_activas[mi_sala]
