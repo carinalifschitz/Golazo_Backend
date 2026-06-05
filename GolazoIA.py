@@ -7,112 +7,120 @@ from openai import OpenAI
 import websockets
 
 # --- CONFIGURACIÓN DE CREDENCIALES ---
-# Prioriza las variables de entorno de Render; si no existen, usa el texto por defecto.
 GROK_API_KEY = os.environ.get("GROK_API_KEY", "TU_API_KEY_DE_GROK")
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "TU_API_KEY_DE_API_FOOTBALL")
 
-# Inicialización oficial de Grok (xAI) usando compatibilidad OpenAI
 client = OpenAI(
     api_key=GROK_API_KEY, 
-    base_url="https://api.xai.tech/v1"
+    base_url="https://xai.tech"
 )
 
-# --- VARIABLES DE CONTROL (CACHÉ, SALAS Y RANKING) ---
-ULTIMO_PARTIDO_ID = None
-
-# Se cambió la pregunta inicial vacía por una trivia real de respaldo para que nunca aparezca en blanco
-TRIVIA_ACTUAL_JSON = '{"pregunta": "¿Qué selección ganó el Mundial de Qatar 2022?", "opciones": ["Francia", "Argentina", "Brasil"], "correcta": "Argentina"}'
+# --- VARIABLES DE CONTROL Y BANCO DE TRIVIAS ---
+BANCO_TRIVIAS = []
+INDICE_INDIVIDUAL = {}
 
 jugadores_esperando = []
 salas_activas = {}
-RANKING_GLOBAL = {}  # Estructura en memoria: {"NombreJugador": PuntajeAcumulado}
+RANKING_GLOBAL = {}
+
+TRIVIA_RESPALDO = {
+    "pregunta": "¿En qué minuto anotó Gonzalo Montiel el penal definitivo para Argentina en la final de Qatar 2022?", 
+    "opciones": ["En la tanda de penales", "Minuto 90", "Minuto 120"], 
+    "correcta": "En la tanda de penales"
+}
 
 # ----------------------------------------------------------------
-# LÓGICA DE DATOS & INTELIGENCIA ARTIFICIAL (CACHÉ)
+# LÓGICA DE DATOS & INTELIGENCIA ARTIFICIAL (DATOS DETALLADOS)
 # ----------------------------------------------------------------
 
-def consultar_api_futbol():
-    """Consulta el último partido finalizado (FT) en la liga configurada."""
-    url = "https://v3.football.api-sports.io/fixtures"
-    querystring = {"league": "128", "season": "2026", "status": "FT", "last": "1"}
+def consultar_api_futbol_masivo():
+    """Consulta los últimos 40 partidos con todos sus eventos detallados (goles, tarjetas)."""
+    url = "https://api-sports.io"
     
-    # CORREGIDO: Usamos la cabecera directa de API-Sports ya que usas su URL directa
-    headers = {
-        'x-apisports-key': FOOTBALL_API_KEY
-    }
+    # Configurado para la temporada 2026 actual de la liga seleccionada
+    querystring = {"league": "128", "season": "2026", "status": "FT", "last": "40"}
+    headers = {'x-apisports-key': FOOTBALL_API_KEY}
+    
     try:
         response = requests.get(url, headers=headers, params=querystring)
         data = response.json()
         if data and data.get('response') and len(data['response']) > 0:
-            return data['response'][0]
+            return data['response']
     except Exception as e:
         print(f"[ERROR API FÚTBOL]: {e}")
     return None
 
-def generar_nueva_trivia(partido_raw):
-    """Invoca a Grok nativamente para estructurar el JSON."""
-    local = partido_raw['teams']['home']['name']
-    visitante = partido_raw['teams']['away']['name']
-    goles_l = partido_raw['goals']['home']
-    goles_v = partido_raw['goals']['away']
+def generar_trivia_de_partido(partido_raw):
+    """Envía todo el objeto del partido a Grok para extraer goleadores, estadios o minutos clave."""
+    
+    # Pasamos el JSON crudo del partido para que Grok lea árbitros, goles, estadios y eventos internos
+    partido_string = json.dumps(partido_raw)
     
     prompt = f"""
-    Generá una pregunta de trivia de fútbol basada estrictamente en este partido reciente:
-    {local} ({goles_l}) vs {visitante} ({goles_v}).
-    La pregunta debe tener exactamente 3 opciones de respuesta corta y concisa.
+    Basándote estrictamente en los datos estructurados de este partido de fútbol en formato JSON:
+    {partido_string}
     
-    Estructura requerida:
+    Generá UNA pregunta de trivia que sea sumamente variada y específica. 
+    NO preguntes simplemente quién ganó el partido. Rotá de forma inteligente entre estas temáticas:
+    1. ¿Qué jugador anotó un gol específico en este partido?
+    2. ¿En qué estadio o ciudad se disputó este encuentro?
+    3. ¿Cuántos goles en total se marcaron o cuál fue el resultado exacto del primer tiempo?
+    4. ¿Hubo alguna tarjeta roja, penal o evento crítico en un minuto específico?
+    5. ¿Quién fue el director técnico de alguno de los equipos o el árbitro del encuentro?
+    
+    La pregunta debe tener exactamente 3 opciones de respuesta corta, clara y concisa.
+    
+    REQUERIMIENTO OBLIGATORIO DE SALIDA (JSON Puro):
     {{
-        "pregunta": "texto de la pregunta", 
+        "pregunta": "texto de la pregunta específica (ej: ¿Quién metió el primer gol de...?)", 
         "opciones": ["op1", "op2", "op3"], 
         "correcta": "texto_exacto_de_la_opcion_correcta"
     }}
     """
     try:
-        # Configuración optimizada nativa para el modelo de Grok
         completion = client.chat.completions.create(
             model="grok-2",
             messages=[
-                {"role": "system", "content": "Sos un backend automatizado que solo responde JSON estricto."},
+                {"role": "system", "content": "Sos un experto estadígrafo de fútbol que solo responde en formato JSON estricto."},
                 {"role": "user", "content": prompt}
             ],
-            response_format={"type": "json_object"}, # Fuerza a Grok a responder JSON válido
-            temperature=0.2
+            response_format={"type": "json_object"},
+            temperature=0.65  # Temperatura equilibrada para asegurar variedad temática
         )
-        return completion.choices[0].message.content.strip()
+        return json.loads(completion.choices[0].message.content.strip())
     except Exception as e:
-        print(f"[ERROR GROK]: {e}")
+        print(f"[ERROR GENERANDO PREGUNTA DETALLADA]: {e}")
         return None
 
-async def bucle_verificacion_partidos():
-    """Revisa la API de fútbol cada 5 minutos. Si el partido cambia, actualiza la trivia."""
-    global ULTIMO_PARTIDO_ID, TRIVIA_ACTUAL_JSON
-    while True:
-        print("[SISTEMA]: Verificando actualización de partidos...")
-        partido = consultar_api_futbol()
-        if partido:
-            id_partido_api = partido['fixture']['id']
-            if id_partido_api != ULTIMO_PARTIDO_ID:
-                print(f"[NUEVO PARTIDO]: ID {id_partido_api} detectado. Actualizando caché con Grok...")
-                nuevo_json = generar_nueva_trivia(partido)
-                if nuevo_json:
-                    TRIVIA_ACTUAL_JSON = nuevo_json
-                    ULTIMO_PARTIDO_ID = id_partido_api
-                    print("[SISTEMA]: Caché de Trivia actualizado con éxito.")
-            else:
-                print("[SISTEMA]: El último partido no ha variado. Manteniendo caché.")
-        await asyncio.sleep(300)
+async def precargar_banco_trivias():
+    """Bucle inicial que descarga los partidos y genera las 40 trivias detalladas una sola vez."""
+    global BANCO_TRIVIAS
+    print("[SISTEMA]: Iniciando descarga de 40 partidos detallados...")
+    partidos = consultar_api_futbol_masivo()
+    
+    if partidos:
+        for i, partido in enumerate(partidos):
+            print(f"[SISTEMA]: Procesando estadísticas del partido {i+1}/40 con Grok...")
+            trivia = generar_trivia_de_partido(partido)
+            if trivia:
+                BANCO_TRIVIAS.append(trivia)
+            # Pausa reglamentaria para respetar límites de ráfaga de la API
+            await asyncio.sleep(0.4)
+            
+    print(f"[SISTEMA]: Banco cargado con éxito. Total preguntas analíticas listas: {len(BANCO_TRIVIAS)}")
 
 # ----------------------------------------------------------------
 # LÓGICA DE RED (WEBSOCKETS COMPETITIVO MULTIJUGADOR)
 # ----------------------------------------------------------------
 
 async def manejar_cliente(websocket):
-    global jugadores_esperando, salas_activas, RANKING_GLOBAL
+    global jugadores_esperando, salas_activas, RANKING_GLOBAL, BANCO_TRIVIAS, INDICE_INDIVIDUAL
     
     nombre_jugador = f"User_{id(websocket) % 1000}"
     if nombre_jugador not in RANKING_GLOBAL:
         RANKING_GLOBAL[nombre_jugador] = 0
+    if nombre_jugador not in INDICE_INDIVIDUAL:
+        INDICE_INDIVIDUAL[nombre_jugador] = 0
 
     print(f"[RED]: {nombre_jugador} se ha conectado.")
     
@@ -121,12 +129,21 @@ async def manejar_cliente(websocket):
             datos = json.loads(mensaje)
             accion = datos.get("accion")
             
+            trivias_disponibles = BANCO_TRIVIAS if len(BANCO_TRIVIAS) > 0 else [TRIVIA_RESPALDO]
+            
             # --- MODO INDIVIDUAL ---
             if accion == "jugar_individual":
+                idx = INDICE_INDIVIDUAL[nombre_jugador]
+                if idx >= len(trivias_disponibles):
+                    idx = 0
+                    INDICE_INDIVIDUAL[nombre_jugador] = 0
+                
+                trivia_actual = trivias_disponibles[idx]
+                
                 await websocket.send(json.dumps({
                     "tipo": "trivia", 
                     "id_sala": "",
-                    "datos": json.loads(TRIVIA_ACTUAL_JSON)
+                    "datos": trivia_actual
                 }))
                 
             # --- MATCHMAKING MULTIJUGADOR ---
@@ -140,32 +157,41 @@ async def manejar_cliente(websocket):
                     j2 = jugadores_esperando.pop(0)
                     
                     id_sala = f"sala_{id(j1)}"
+                    
+                    import random
+                    trivia_sala = random.choice(trivias_disponibles)
+                    
                     salas_activas[id_sala] = {
                         "jugadores": [j1, j2],
                         "tiempo_inicio": time.time(),
+                        "trivia": trivia_sala,
                         "respuestas_recibidas": {}
                     }
                     
                     payload_inicio = json.dumps({
                         "tipo": "inicio_multijugador",
                         "id_sala": id_sala,
-                        "datos": json.loads(TRIVIA_ACTUAL_JSON)
+                        "datos": trivia_sala
                     })
                     
                     await j1.send(payload_inicio)
                     await j2.send(payload_inicio)
-                    print(f"[SALA]: {id_sala} iniciada entre dos rivales.")
+                    print(f"[SALA]: {id_sala} iniciada.")
                     
             # --- PROCESAMIENTO DE RESPUESTAS & LÓGICA DE PUNTOS ---
             elif accion == "responder":
                 id_sala = datos.get("id_sala")
                 eleccion = datos.get("eleccion")
-                trivia_obj = json.loads(TRIVIA_ACTUAL_JSON)
                 
                 if not id_sala or id_sala == "":
+                    idx = INDICE_INDIVIDUAL[nombre_jugador]
+                    trivia_obj = trivias_disponibles[idx]
+                    
                     es_correcto = (eleccion == trivia_obj.get("correcta"))
                     if es_correcto:
                         RANKING_GLOBAL[nombre_jugador] += 100
+                    
+                    INDICE_INDIVIDUAL[nombre_jugador] += 1
                     
                     await websocket.send(json.dumps({
                         "tipo": "resultado", 
@@ -177,7 +203,7 @@ async def manejar_cliente(websocket):
                 if id_sala in salas_activas:
                     sala = salas_activas[id_sala]
                     tiempo_respuesta = time.time() - sala["tiempo_inicio"]
-                    es_correcto = (eleccion == trivia_obj.get("correcta"))
+                    es_correcto = (eleccion == sala["trivia"].get("correcta"))
                     
                     sala["respuestas_recibidas"][websocket] = {
                         "nombre": nombre_jugador,
@@ -185,7 +211,6 @@ async def manejar_cliente(websocket):
                         "tiempo": tiempo_respuesta
                     }
                     
-                    # CORREGIDO: Cierre y resolución de la partida multijugador completo
                     if len(sala["respuestas_recibidas"]) == 2:
                         ganador_sala = "Empate / Nadie acertó"
                         mejor_tiempo = 9999.0
@@ -208,26 +233,3 @@ async def manejar_cliente(websocket):
                         
                         for jugador_ws in sala["jugadores"]:
                             try:
-                                await jugador_ws.send(payload_fin)
-                            except Exception:
-                                pass
-                                
-                        del salas_activas[id_sala]
-                        print(f"[SALA]: {id_sala} cerrada. Ganador: {ganador_sala}")
-
-    except websockets.exceptions.ConnectionClosed:
-        print(f"[RED]: {nombre_jugador} desconectado.")
-    finally:
-        if websocket in jugadores_esperando:
-            jugadores_esperando.remove(websocket)
-
-# CORREGIDO: Añadido el bucle asíncrono principal obligatorio para Render
-async def main():
-    asyncio.create_task(bucle_verificacion_partidos())
-    puerto = int(os.environ.get("PORT", 8765))
-    print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
-    async with websockets.serve(manejar_cliente, "0.0.0.0", puerto):
-        await asyncio.Future()
-
-if __name__ == "__main__":
-    asyncio.run(main())
