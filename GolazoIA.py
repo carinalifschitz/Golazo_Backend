@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import random
 import requests
 import time
 from openai import OpenAI
@@ -116,7 +117,7 @@ async def manejar_cliente(websocket):
     if nombre_jugador not in RANKING_GLOBAL:
         RANKING_GLOBAL[nombre_jugador] = 0
     if nombre_jugador not in INDICE_INDIVIDUAL:
-        INDICE_INDIVIDUAL[nombre_jugador] = 0
+        INDICE_INDIVIDUAL[nombre_jugador] = None
 
     print(f"[RED]: {nombre_jugador} se ha conectado.")
     
@@ -129,12 +130,10 @@ async def manejar_cliente(websocket):
             
             # --- MODO INDIVIDUAL ---
             if accion == "jugar_individual":
-                idx = INDICE_INDIVIDUAL[nombre_jugador]
-                if idx >= len(trivias_disponibles):
-                    idx = 0
-                    INDICE_INDIVIDUAL[nombre_jugador] = 0
-                
-                trivia_actual = trivias_disponibles[idx]
+                # Selecciona una pregunta al azar de las disponibles
+                trivia_actual = random.choice(trivias_disponibles)
+                # Almacena el objeto completo de la pregunta asignada al jugador
+                INDICE_INDIVIDUAL[nombre_jugador] = trivia_actual
                 
                 await websocket.send(json.dumps({
                     "tipo": "trivia", 
@@ -153,7 +152,6 @@ async def manejar_cliente(websocket):
                     j2 = jugadores_esperando.pop(0)
                     id_sala = f"sala_{id(j1)}"
                     
-                    import random
                     trivia_sala = random.choice(trivias_disponibles)
                     
                     salas_activas[id_sala] = {
@@ -179,25 +177,23 @@ async def manejar_cliente(websocket):
                 
                 # --- RESPUESTA EN MODO INDIVIDUAL AUTOMÁTICO ---
                 if not id_sala or id_sala == "":
-                    idx = INDICE_INDIVIDUAL[nombre_jugador]
-                    trivia_obj = trivias_disponibles[idx]
+                    # Recupera el objeto de trivia que guardamos cuando el usuario inició el juego o recibió la tanda anterior
+                    trivia_obj = INDICE_INDIVIDUAL.get(nombre_jugador)
+                    
+                    # Fallback de seguridad por si el estado está vacío o corrupto
+                    if not trivia_obj or isinstance(trivia_obj, int):
+                        trivia_obj = TRIVIA_RESPALDO
                     
                     es_correcto = (eleccion == trivia_obj.get("correcta"))
                     if es_correcto:
                         RANKING_GLOBAL[nombre_jugador] += 100
                     
-                    # Avanzamos el índice para calcular la que sigue
-                    INDICE_INDIVIDUAL[nombre_jugador] += 1
-                    nuevo_idx = INDICE_INDIVIDUAL[nombre_jugador]
+                    # Selecciona la siguiente pregunta completamente al azar del pool
+                    siguiente_trivia = random.choice(trivias_disponibles)
+                    # Actualiza el registro asignado para la próxima validación
+                    INDICE_INDIVIDUAL[nombre_jugador] = siguiente_trivia
                     
-                    # Control de ciclo: si llegó al tope (40), resetea a la primera
-                    if nuevo_idx >= len(trivias_disponibles):
-                        nuevo_idx = 0
-                        INDICE_INDIVIDUAL[nombre_jugador] = 0
-                    
-                    siguiente_trivia = trivias_disponibles[nuevo_idx]
-                    
-                    # Enviamos el veredicto actual Y la próxima pregunta adjunta en el mismo payload
+                    # Enviamos el veredicto actual Y la próxima pregunta aleatoria adjunta en el mismo payload
                     await websocket.send(json.dumps({
                         "tipo": "resultado", 
                         "correcto": es_correcto,
