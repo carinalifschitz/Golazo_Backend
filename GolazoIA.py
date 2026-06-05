@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import requests
+import random
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -16,26 +17,19 @@ client = OpenAI(
     base_url="https://x.ai"
 )
 
-# --- VARIABLES DE CONTROL ---
+# --- VARIABLES DE CONTROL GLOBAL ---
 BANCO_TRIVIAS = []
-INDICE_INDIVIDUAL = {}
-jugadores_esperando = []
-salas_activas = {}
-RANKING_GLOBAL = {}
+jugadores_esperando = []  
+salas_activas = {}       
 
-# Banco de emergencias obligatorio por si falla la API
 BANCO_RESPALDO = [
     {"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"},
     {"pregunta": "¿Quién es el máximo goleador de la Selección Argentina?", "opciones": ["Messi", "Maradona", "Batistuta"], "correcta": "Messi"},
     {"pregunta": "¿Cuál es el estadio de Boca Juniors?", "opciones": ["La Bombonera", "El Monumental", "El Cilindro"], "correcta": "La Bombonera"}
 ]
 
-# ----------------------------------------------------------------
-# CONEXIÓN CON API-FOOTBALL (apifootball.com)
-# ----------------------------------------------------------------
 def obtener_datos_futbol_real():
-    # CORRECCIÓN 2: URL Base alineada con el Host de la API
-    url_base = "https://v3.football.api-sports.io"
+    url_base = "https://api-sports.io"
     headers = {
         "x-rapidapi-host": "v3.football.api-sports.io",
         "x-rapidapi-key": FOOTBALL_API_KEY
@@ -47,14 +41,12 @@ def obtener_datos_futbol_real():
         if "response" in res_goleadores:
             for item in res_goleadores["response"][:12]:
                 player = item["player"]
-                # CORRECCIÓN 1: statistics siempre llega como una LISTA desde API-Football
                 stats_list = item["statistics"]
-                stats = stats_list[0] if isinstance(stats_list, list) and len(stats_list) > 0 else stats_list
-                
+                stats = stats_list if isinstance(stats_list, list) and len(stats_list) > 0 else stats_list
                 datos_futbol["goleadores"].append({
                     "nombre": player["name"],
-                    "equipo": stats["team"]["name"] if "team" in stats else "Desconocido",
-                    "goles": stats["goals"]["total"] if "goals" in stats else 0,
+                    "equipo": stats.get("team", {}).get("name", "Desconocido") if isinstance(stats, dict) else "Desconocido",
+                    "goles": stats.get("goals", {}).get("total", 0) if isinstance(stats, dict) else 0,
                     "nacionalidad": player["nationality"]
                 })
                 
@@ -62,44 +54,23 @@ def obtener_datos_futbol_real():
         res_equipos = requests.get(url_equipos, headers=headers, timeout=5).json()
         if "response" in res_equipos:
             for item in res_equipos["response"][:12]:
-                team = item["team"]
-                venue = item["venue"]
                 datos_futbol["estadios"].append({
-                    "equipo": team["name"],
-                    "estadio_nombre": venue["name"],
-                    "ciudad": venue["city"],
-                    "capacidad": venue["capacity"]
-                })
-
-        url_fixtures = f"{url_base}/fixtures?league=128&season=2026&status=FT"
-        res_fixtures = requests.get(url_fixtures, headers=headers, timeout=5).json()
-        if "response" in res_fixtures:
-            for item in res_fixtures["response"][-15:]:
-                teams = item["teams"]
-                goals = item["goals"]
-                fixture_venue = item["fixture"]["venue"]
-                datos_futbol["partidos_jugados"].append({
-                    "local": teams["home"]["name"],
-                    "visitante": teams["away"]["name"],
-                    "goles_local": goals["home"],
-                    "goles_visitante": goals["away"],
-                    "estadio": fixture_venue["name"],
-                    "ciudad": fixture_venue["city"]
+                    "equipo": item["team"]["name"],
+                    "estadio_nombre": item["venue"]["name"],
+                    "ciudad": item["venue"]["city"],
+                    "capacidad": item["venue"]["capacity"]
                 })
     except Exception as e:
-        print(f"Error controlado al recolectar datos de API-Football: {e}")
+        print(f"Error en API-Football: {e}")
     return datos_futbol
 
 async def generar_banco_trivias_ai():
     global BANCO_TRIVIAS
     try:
-        print("Obteniendo estadísticas desde API-Football...")
         loop = asyncio.get_running_loop()
-        contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
-        
-        print("Iniciando solicitud a Grok...")
-        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON estructurado que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
-        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto_futbol, ensure_ascii=False)} Genera un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones, correcta."
+        contexto = await loop.run_in_executor(None, obtener_datos_futbol_real)
+        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON con un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
+        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto)} Genera un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones, correcta."
         
         completion = await loop.run_in_executor(
             None,
@@ -110,47 +81,98 @@ async def generar_banco_trivias_ai():
                 timeout=15
             )
         )
-        datos_parseados = json.loads(completion.choices.message.content)
-        if "preguntas" in datos_parseados:
-            BANCO_TRIVIAS = datos_parseados["preguntas"]
-            print(f"¡Éxito! Se inyectaron {len(BANCO_TRIVIAS)} preguntas.")
+        datos = json.loads(completion.choices.message.content)
+        if "preguntas" in datos:
+            BANCO_TRIVIAS = datos["preguntas"]
+            print(f"¡Éxito! Inyectadas {len(BANCO_TRIVIAS)} preguntas de IA.")
             return
     except Exception as e:
-        print(f"Fallo controlado en la generación de IA: {e}")
-    
+        print(f"Fallo en IA: {e}")
     BANCO_TRIVIAS = BANCO_RESPALDO
-    print("Cargado banco de emergencias para evitar caídas de servidor.")
 
-# CORRECCIÓN 3: Reemplazo de @app.on_event por Lifespan (Método moderno)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Código que se ejecuta al iniciar la app
     asyncio.create_task(generar_banco_trivias_ai())
     yield
-    # Código si quisieras hacer algo al apagar la app (vacío por ahora)
 
 app = FastAPI(lifespan=lifespan)
 
-# --- RUTA 1: INTERFAZ WEB ---
 @app.get("/", response_class=HTMLResponse)
 async def obtener_interfaz():
-    try:
-        ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
-        if os.path.exists(ruta_html):
-            with open(ruta_html, "r", encoding="utf-8") as archivo:
-                return HTMLResponse(content=archivo.read(), status_code=200)
-    except Exception as e:
-        print(f"Error al leer HTML: {e}")
-    
-    return HTMLResponse(content="<h1>⚽ Servidor Activo (El archivo index.html se está subiendo o procesando)</h1>", status_code=200)
+    ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(ruta_html):
+        with open(ruta_html, "r", encoding="utf-8") as archivo:
+            return HTMLResponse(content=archivo.read(), status_code=200)
+    return HTMLResponse(content="<h1>⚽ Servidor Activo (Subiendo index.html...)</h1>", status_code=200)
 
-# --- RUTA 2: WEBSOCKET ---
+# --- WEBSOCKET MODIFICADO ---
 @app.websocket("/ws")
 async def endpoint_websocket(websocket: WebSocket):
     await websocket.accept()
+    mi_sala = None
     try:
         while True:
-            mensaje = await websocket.receive_text()
-            pass
+            data = await websocket.receive_text()
+            mensaje = json.loads(data)
+            accion = mensaje.get("accion")
+
+            if accion == "solicitar_individual":
+                # Mezclamos el banco disponible y enviamos el lote completo (máximo 40)
+                pool = BANCO_TRIVIAS if BANCO_TRIVIAS else BANCO_RESPALDO
+                preguntas_mezcladas = random.sample(pool, min(40, len(pool)))
+                await websocket.send_text(json.dumps({
+                    "tipo": "banco_individual", 
+                    "preguntas": preguntas_mezcladas
+                }))
+
+            elif accion == "buscar_match":
+                if websocket not in jugadores_esperando:
+                    jugadores_esperando.append(websocket)
+                
+                if len(jugadores_esperando) >= 2:
+                    p1 = jugadores_esperando.pop(0)
+                    p2 = jugadores_esperando.pop(0)
+                    mi_sala = f"sala_{random.randint(1000, 9999)}"
+                    
+                    pool = BANCO_TRIVIAS if BANCO_TRIVIAS else BANCO_RESPALDO
+                    # Para el Versus Versus, mandamos 5 preguntas para que no sea eterno, o 40 si así lo preferís.
+                    preguntas_partida = random.sample(pool, min(40, len(pool)))
+                    
+                    salas_activas[mi_sala] = {
+                        "jugadores": [p1, p2],
+                        "preguntas": preguntas_partida
+                    }
+                    
+                    payload = json.dumps({
+                        "tipo": "match_encontrado",
+                        "salaId": mi_sala,
+                        "preguntas": preguntas_partida
+                    })
+                    await p1.send_text(payload)
+                    await p2.send_text(payload)
+
+            elif accion == "cancelar_busqueda":
+                if websocket in jugadores_esperando:
+                    jugadores_esperando.remove(websocket)
+
+            elif accion == "enviar_actualizacion":
+                sala_id = mensaje.get("salaId")
+                if sala_id in salas_activas:
+                    for jugador in salas_activas[sala_id]["jugadores"]:
+                        if jugador != websocket:
+                            await jugador.send_text(json.dumps({
+                                "tipo": "actualizacion_rival",
+                                "puntos_rival": mensaje.get("puntos"),
+                                "progreso_rival": mensaje.get("progreso")
+                            }))
+
     except WebSocketDisconnect:
-        print("Un jugador se ha desconectado.")
+        if websocket in jugadores_esperando:
+            jugadores_esperando.remove(websocket)
+        if mi_sala and mi_sala in salas_activas:
+            for jugador in salas_activas[mi_sala]["jugadores"]:
+                try:
+                    await jugador.send_text(json.dumps({"tipo": "rival_desconectado"}))
+                except:
+                    pass
+            del salas_activas[mi_sala]
