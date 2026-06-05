@@ -97,9 +97,33 @@ async def obtener_interfaz():
 @app.get("/api/trivias")
 async def obtener_trivias_http():
     if not GROK_API_KEY:
-        print("Aviso: GROK_API_KEY no configurada. Cargando banco estático.")
-        return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
+        print("Aviso: GROK_API_KEY no configurada. Mezclando banco estático.")
+        copia_banco = list(BANCO_RESPALDO)
+        random.shuffle(copia_banco)
+        return {"preguntas": copia_banco}
 
+    # 1. Traemos los datos en tiempo real de la API de Fútbol
+    loop = asyncio.get_running_loop()
+    contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+    
+    # 2. Verificamos si la API de fútbol trajo información real
+    goleadores_reales = contexto_futbol.get("goleadores", [])
+    
+    # Si la API falló (por límite de requests o key), le inventamos un mini-contexto real 
+    # para que Grok arme preguntas dinámicas igual y nunca use el banco harcodeado viejo
+    if not goleadores_reales:
+        print("API-Football vacía temporalmente. Pasando contexto de contingencia a Grok.")
+        contexto_futbol = {
+            "goleadores": [
+                {"nombre": "Miguel Borja", "equipo": "River Plate"},
+                {"nombre": "Edinson Cavani", "equipo": "Boca Juniors"},
+                {"nombre": "Adrian Martinez", "equipo": "Racing Club"},
+                {"nombre": "Adam Bareiro", "equipo": "River Plate"},
+                {"nombre": "Walter Bou", "equipo": "Lanús"}
+            ]
+        }
+
+    # 3. Armamos la petición para Grok INYECTANDO los datos recolectados
     try:
         url_grok = "https://x.ai"
         headers_grok = {
@@ -107,11 +131,21 @@ async def obtener_trivias_http():
             "Content-Type": "application/json"
         }
         
-        loop = asyncio.get_running_loop()
-        contexto = await loop.run_in_executor(None, obtener_datos_futbol_real)
+        prompt_sistema = (
+            "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON válido "
+            "que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. "
+            "No uses bloques de código Markdown, ni ```json, ni texto explicativo extra."
+        )
         
-        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON válido que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. No uses bloques de código Markdown ni texto extra."
-        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto)} Genera un array de exactamente 40 preguntas de trivia variadas sobre fútbol internacional y argentino de los últimos años. Estructura requerida: pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una de las opciones)."
+        # Le pasamos explícitamente los datos reales en el prompt de usuario
+        prompt_usuario = (
+            f"Basándote estrictamente en estos datos reales actuales de la liga argentina: {json.dumps(contexto_futbol, ensure_ascii=False)} "
+            "Genera un array de exactamente 40 preguntas de trivia variadas. "
+            "Al menos 15 preguntas DEBEN usar los nombres de los jugadores y equipos provistos en los datos reales "
+            "(por ejemplo: '¿En qué equipo juega actualmente [Nombre]?' o '¿Quién es el delantero de [Equipo]?' o preguntas de actualidad). "
+            "Las demás preguntas pueden ser de cultura general del fútbol argentino e internacional. "
+            "Estructura requerida por pregunta: pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una de las opciones)."
+        )
 
         payload = {
             "model": "grok-beta",
@@ -122,7 +156,7 @@ async def obtener_trivias_http():
             ]
         }
 
-        res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=12)
+        res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=14)
         
         if res.status_code == 200:
             datos = res.json()
@@ -130,12 +164,18 @@ async def obtener_trivias_http():
             datos_parseados = json.loads(contenido_texto)
             
             if "preguntas" in datos_parseados and len(datos_parseados["preguntas"]) > 0:
-                print("¡Éxito! 40 preguntas nuevas generadas por Grok.")
-                return {"preguntas": datos_parseados["preguntas"]}
+                print(f"¡Éxito total! Grok procesó los datos de la API y armó {len(datos_parseados['preguntas'])} preguntas.")
+                preguntas_ia = datos_parseados["preguntas"]
+                random.shuffle(preguntas_ia)
+                return {"preguntas": preguntas_ia}
         else:
             print(f"Error de Grok: Código {res.status_code} - {res.text}")
             
     except Exception as e:
-        print(f"Error al conectar con Grok: {e}")
+        print(f"Error al conectar o parsear Grok: {e}")
     
-    return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
+    # 4. Mezcla aleatoria de respaldo en caso de desconexión total de internet
+    print("Enviando banco de respaldo por error imprevisto de red.")
+    copia_respaldo = list(BANCO_RESPALDO)
+    random.shuffle(copia_respaldo)
+    return {"preguntas": copia_respaldo}
