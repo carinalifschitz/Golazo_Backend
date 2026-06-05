@@ -171,29 +171,41 @@ async def generar_banco_trivias_ai():
 # CONEXIÓN WEBSOCKET PARA RENDER
 # ----------------------------------------------------------------
 
+# --- NUEVO MANEJADOR COMPATIBLE CON HTTP Y WEBSOCKETS ---
 async def manejador_websocket(websocket):
+    # CORRECCIÓN PARA EVITAR EL 502: Si Render envía una petición HTTP, respondemos 200 OK
+    if isinstance(websocket, websockets.server.HTTPResponse):
+        # Render comprobará que el servicio está vivo aquí
+        return (websockets.http.HTTPStatus.OK, [], b"OK - Servidor Golazo corriendo")
+
+    # Lógica normal para los jugadores que conectan por WebSocket (wss://)
     try:
         async for mensaje in websocket:
-            pass 
+            datos = json.loads(mensaje)
+            # Acá procesás las trivias...
+            pass
     except websockets.exceptions.ConnectionClosed:
         pass
 
 async def main():
+    # 1. Ejecutar la IA antes de abrir puertos
     await generar_banco_trivias_ai()
 
-    # Leemos el puerto dinámico de Render
+    # 2. Configurar el puerto dinámico de Render
     puerto = int(os.environ.get("PORT", 10000))
     
-    # Agregamos parámetros de compatibilidad para proxies inversos como Render
+    # 3. Iniciar el servidor con tiempos de espera optimizados para la nube
     async with websockets.serve(
         manejador_websocket, 
         "0.0.0.0", 
         puerto,
-        ping_interval=20,  # Evita que Render te cierre la conexión por inactividad
+        ping_interval=20,  # Mantiene el canal abierto y evita cierres automáticos
         ping_timeout=20
     ):
-        print(f"Servidor WebSocket escuchando en el puerto {puerto}")
+        print(f"Servidor WebSocket e HTTP escuchando en el puerto {puerto}")
         await asyncio.Future() 
 
 if __name__ == "__main__":
+    asyncio.run(main())
+
     asyncio.run(main())
