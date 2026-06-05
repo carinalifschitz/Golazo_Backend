@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import requests
@@ -7,7 +8,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- CONFIGURACIÓN DE CREDENCIALES DESDE RENDER ---
-# os.environ.get lee los valores exactos que configuraste en la pestaña Environment Variables
 GROK_API_KEY = os.environ.get("GROK_API_KEY")
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
 
@@ -19,7 +19,7 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Quién fue el director técnico de la Selección Argentina en el Mundial de Sudáfrica 2010?", "opciones": ["Diego Maradona", "Alejandro Sabella", "Alfio Basile"], "correcta": "Diego Maradona"},
     {"pregunta": "¿Qué país organizó y ganó el Mundial de fútbol de 1998?", "opciones": ["Francia", "Brasil", "Italia"], "correcta": "Francia"},
     {"pregunta": "¿Cuál es el estadio de fútbol con mayor capacidad de espectadores en Sudamérica?", "opciones": ["Estadio Mâs Monumental", "Estadio Maracaná", "Estadio Centenario"], "correcta": "Estadio Mâs Monumental"},
-    {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' en 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
+    {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' in 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
     {"pregunta": "¿Qué club de la Liga Argentina es conocido popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
     {"pregunta": "¿Quién ganó el Balón de Oro en el año 2023?", "opciones": ["Lionel Messi", "Erling Haaland", "Kylian Mbappé"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Cuál de estos equipos NO descendió nunca de la Primera División de Argentina?", "opciones": ["Boca Juniors", "River Plate", "Independiente"], "correcta": "Boca Juniors"},
@@ -96,10 +96,9 @@ async def obtener_interfaz():
 
 @app.get("/api/trivias")
 async def obtener_trivias_http():
-    # Validación preventiva por si las variables no se leyeron bien
     if not GROK_API_KEY:
-        print("Aviso: GROK_API_KEY está vacía en Render. Usando banco harcodeado.")
-        return {"questions": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
+        print("Aviso: GROK_API_KEY no configurada. Cargando banco estático.")
+        return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
 
     try:
         url_grok = "https://x.ai"
@@ -116,3 +115,7 @@ async def obtener_trivias_http():
 
         payload = {
             "model": "grok-beta",
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": prompt_usuario}]}res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=12)if res.status_code == 200:datos = res.json()contenido_texto = datos["choices"]["message"]["content"]datos_parseados = json.loads(contenido_texto)if "preguntas" in datos_parseados and len(datos_parseados["preguntas"]) > 0:print("¡Éxito! 40 preguntas nuevas generadas por Grok.")return {"preguntas": datos_parseados["preguntas"]}else:print(f"Error de Grok: Código {res.status_code} - {res.text}")except Exception as e:print(f"Error al conectar con Grok: {e}")return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
