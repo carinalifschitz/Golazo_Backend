@@ -34,12 +34,10 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Quién es el máximo goleador histórico de los mundiales?", "opciones": ["Miroslav Klose", "Ronaldo Nazário", "Gerd Müller"], "correcta": "Miroslav Klose"},
     {"pregunta": "¿Qué club inglés tiene más títulos de la UEFA Champions League?", "opciones": ["Liverpool", "Manchester United", "Chelsea"], "correcta": "Liverpool"},
     {"pregunta": "¿Quién ganó la Eurocopa en el año 2024?", "opciones": ["España", "Inglaterra", "Francia"], "correcta": "España"},
-    {"pregunta": "¿En qué club francés jugó Lionel Messi tras salir del Barcelona?", "opciones": ["PSG", "Marsella", "Mónaco"], "correcta": "PSG"},
+    {"pregunta": "In qué club francés jugó Lionel Messi tras salir del Barcelona?", "opciones": ["PSG", "Marsella", "Mónaco"], "correcta": "PSG"},
     {"pregunta": "¿Qué país organizó el Mundial de fútbol de 1978?", "opciones": ["Argentina", "Brasil", "México"], "correcta": "Argentina"},
     {"pregunta": "¿Cómo se llama el trofeo que se entrega al campeón de la liga española?", "opciones": ["Trofeo de LaLiga", "Copa del Rey", "Copa de la Reina"], "correcta": "Trofeo de LaLiga"},
-    {"pregunta": "¿Qué selección africana fue la primera en llegar a una semifinal del Mundo?", "opciones": ["Marruecos", "Camerún", "Senegal"], "correcta": "Marruecos"},
-    {"pregunta": "¿Quién es el máximo goleador histórico de la UEFA Champions League?", "opciones": ["Cristiano Ronaldo", "Lionel Messi", "Robert Lewandowski"], "correcta": "Cristiano Ronaldo"},
-    {"pregunta": "¿En qué país se juega el clásico entre Celtic y Rangers?", "opciones": ["Escocia", "Irlanda", "Gales"], "correcta": "Escocia"},
+    {"pregunta": "In qué país se juega el clásico entre Celtic y Rangers?", "opciones": ["Escocia", "Irlanda", "Gales"], "correcta": "Escocia"},
     {"pregunta": "¿Qué club de fútbol argentino es conocido como 'La Academia'?", "opciones": ["Racing Club", "San Lorenzo", "Estudiantes"], "correcta": "Racing Club"},
     {"pregunta": "¿Qué número de camiseta usaba Zinedine Zidane en el Real Madrid?", "opciones": ["5", "10", "7"], "correcta": "5"},
     {"pregunta": "¿Quién es el dueño del arco de la Selección Argentina apodado 'Dibu'?", "opciones": ["Emiliano Martínez", "Franco Armani", "Gerónimo Rulli"], "correcta": "Emiliano Martínez"},
@@ -56,7 +54,6 @@ BANCO_RESPALDO = [
 ]
 
 def obtener_datos_futbol_real():
-    # Usamos la URL base oficial alternativa para evitar bloqueos por host corporativo
     url_base = "https://api-sports.io"
     headers = {
         "x-rapidapi-host": "v3.football.api-sports.io",
@@ -66,7 +63,7 @@ def obtener_datos_futbol_real():
     }
     datos_futbol = {"goleadores": []}
     
-    print("[DIAGNÓSTICO] ---> 1. Llamando a API-Football...")
+    print("[DIAGNÓSTICO] ---> Llamando a API-Football...")
     try:
         url_goleadores = f"{url_base}/players/topscorers?league=128&season=2024"
         res = requests.get(url_goleadores, headers=headers, timeout=5)
@@ -116,11 +113,17 @@ async def obtener_trivias_http():
         copia_respaldo = list(BANCO_RESPALDO)
         random.shuffle(copia_respaldo)
         return {"preguntas": copia_respaldo}
-    contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+
+    # 1. Declarar y ejecutar llamada asíncrona a la API de Fútbol de forma segura
+    contexto_futbol = {"goleadores": []}
+    try:
+        loop = asyncio.get_running_loop()
+        contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+    except Exception as e:
+        print(f"[ALERTA LOOP] Falló el ejecutor asíncrono: {e}")
     
-    # Si la API de fútbol falla por Cloudflare, inyectamos estos datos reales actualizados para que Grok tenga qué procesar
     if not contexto_futbol.get("goleadores"):
-        print("[DIAGNÓSTICO] API-Football bloqueada. Usando datos reales guardados para no frenar a Grok.")
+        print("[DIAGNÓSTICO] API-Football vacía/fallida. Armando datos ficticios de control para Grok.")
         contexto_futbol = {
             "goleadores": [
                 {"nombre": "Miguel Borja", "equipo": "River Plate"},
@@ -130,9 +133,8 @@ async def obtener_trivias_http():
             ]
         }
 
-    # PASO 2: Enviar los datos recolectados al modelo comercial oficial de Grok
+    # 2. Ejecutar llamada a Grok
     try:
-        # URL oficial del endpoint API de xAI (Sin bloqueos de Cloudflare)
         url_grok = "https://x.ai"
         headers_grok = {
             "Authorization": f"Bearer {GROK_API_KEY}",
@@ -142,16 +144,16 @@ async def obtener_trivias_http():
         prompt_sistema = (
             "Sos un experto en fútbol. Tu única tarea es responder con un objeto JSON válido. "
             "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
-            "No devuelvas bloques Markdown (```json) ni texto explicativo extra."
+            "No devuelvas bloques Markdown ni texto extra."
         )
         prompt_usuario = (
-            f"Basándote estrictamente en estos datos de goleadores actuales: {json.dumps(contexto_futbol, ensure_ascii=False)}. "
+            f"Basándote en estos datos de goleadores actuales: {json.dumps(contexto_futbol, ensure_ascii=False)}. "
             "Generá un array de exactamente 40 preguntas de trivia con estructura de objeto JSON: "
             "pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una opción)."
         )
 
         payload = {
-            "model": "grok-2", 
+            "model": "grok-2",
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": prompt_sistema},
@@ -160,7 +162,7 @@ async def obtener_trivias_http():
             "temperature": 0.7
         }
 
-        print("[DIAGNÓSTICO] ---> 2. Enviando datos reales de la API al servidor de Grok (x.ai)...")
+        print("[DIAGNÓSTICO] ---> Enviando datos al servidor de Grok (x.ai)...")
         res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=15)
         
         print(f"[DIAGNÓSTICO] Grok respondió con Código HTTP: {res.status_code}")
@@ -185,6 +187,3 @@ async def obtener_trivias_http():
     copia_respaldo = list(BANCO_RESPALDO)
     random.shuffle(copia_respaldo)
     return {"preguntas": copia_respaldo}
-
-    # PASO 1: Obtener contexto real de fútbol desde la API
-    loop = asyncio.get_running_loop()
