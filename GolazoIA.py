@@ -34,10 +34,8 @@ TRIVIA_RESPALDO = {
 # ----------------------------------------------------------------
 
 def consultar_api_futbol_masivo():
-    """Consulta los últimos 40 partidos con todos sus eventos detallados (goles, tarjetas)."""
+    """Consulta los últimos 40 partidos con todos sus eventos detallados."""
     url = "https://api-sports.io"
-    
-    # Configurado para la temporada 2026 actual de la liga seleccionada
     querystring = {"league": "128", "season": "2026", "status": "FT", "last": "40"}
     headers = {'x-apisports-key': FOOTBALL_API_KEY}
     
@@ -51,9 +49,7 @@ def consultar_api_futbol_masivo():
     return None
 
 def generar_trivia_de_partido(partido_raw):
-    """Envía todo el objeto del partido a Grok para extraer goleadores, estadios o minutos clave."""
-    
-    # Pasamos el JSON crudo del partido para que Grok lea árbitros, goles, estadios y eventos internos
+    """Envía el objeto del partido a Grok para extraer la trivia."""
     partido_string = json.dumps(partido_raw)
     
     prompt = f"""
@@ -66,13 +62,12 @@ def generar_trivia_de_partido(partido_raw):
     2. ¿En qué estadio o ciudad se disputó este encuentro?
     3. ¿Cuántos goles en total se marcaron o cuál fue el resultado exacto del primer tiempo?
     4. ¿Hubo alguna tarjeta roja, penal o evento crítico en un minuto específico?
-    5. ¿Quién fue el director técnico de alguno de los equipos o el árbitro del encuentro?
     
     La pregunta debe tener exactamente 3 opciones de respuesta corta, clara y concisa.
     
     REQUERIMIENTO OBLIGATORIO DE SALIDA (JSON Puro):
     {{
-        "pregunta": "texto de la pregunta específica (ej: ¿Quién metió el primer gol de...?)", 
+        "pregunta": "texto de la pregunta específica", 
         "opciones": ["op1", "op2", "op3"], 
         "correcta": "texto_exacto_de_la_opcion_correcta"
     }}
@@ -85,15 +80,16 @@ def generar_trivia_de_partido(partido_raw):
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.65  # Temperatura equilibrada para asegurar variedad temática
+            temperature=0.65
         )
+        # CORREGIDO: Añadido el índice [0] obligatorio para la librería OpenAI
         return json.loads(completion.choices[0].message.content.strip())
     except Exception as e:
         print(f"[ERROR GENERANDO PREGUNTA DETALLADA]: {e}")
         return None
 
 async def precargar_banco_trivias():
-    """Bucle inicial que descarga los partidos y genera las 40 trivias detalladas una sola vez."""
+    """Bucle inicial que descarga los partidos y genera las 40 trivias."""
     global BANCO_TRIVIAS
     print("[SISTEMA]: Iniciando descarga de 40 partidos detallados...")
     partidos = consultar_api_futbol_masivo()
@@ -101,13 +97,13 @@ async def precargar_banco_trivias():
     if partidos:
         for i, partido in enumerate(partidos):
             print(f"[SISTEMA]: Procesando estadísticas del partido {i+1}/40 con Grok...")
+            # CORREGIDO: Eliminada la 'l' errónea del parámetro partido_raw
             trivia = generar_trivia_de_partido(partido)
             if trivia:
                 BANCO_TRIVIAS.append(trivia)
-            # Pausa reglamentaria para respetar límites de ráfaga de la API
             await asyncio.sleep(0.4)
             
-    print(f"[SISTEMA]: Banco cargado con éxito. Total preguntas analíticas listas: {len(BANCO_TRIVIAS)}")
+    print(f"[SISTEMA]: Banco cargado con éxito. Total preguntas listas: {len(BANCO_TRIVIAS)}")
 
 # ----------------------------------------------------------------
 # LÓGICA DE RED (WEBSOCKETS COMPETITIVO MULTIJUGADOR)
@@ -155,7 +151,6 @@ async def manejar_cliente(websocket):
                 if len(jugadores_esperando) >= 2:
                     j1 = jugadores_esperando.pop(0)
                     j2 = jugadores_esperando.pop(0)
-                    
                     id_sala = f"sala_{id(j1)}"
                     
                     import random
@@ -176,9 +171,8 @@ async def manejar_cliente(websocket):
                     
                     await j1.send(payload_inicio)
                     await j2.send(payload_inicio)
-                    print(f"[SALA]: {id_sala} iniciada.")
                     
-            # --- PROCESAMIENTO DE RESPUESTAS & LÓGICA DE PUNTOS ---
+            # --- PROCESAMIENTO DE RESPUESTAS ---
             elif accion == "responder":
                 id_sala = datos.get("id_sala")
                 eleccion = datos.get("eleccion")
@@ -233,3 +227,16 @@ async def manejar_cliente(websocket):
                         
                         for jugador_ws in sala["jugadores"]:
                             try:
+                                await jugador_ws.send(payload_fin)
+                            except Exception:
+                                pass
+                                
+                        del salas_activas[id_sala]
+
+    except websockets.exceptions.ConnectionClosed:
+        print(f"[RED]: {nombre_jugador} desconectado.")
+    finally:
+        if websocket in jugadores_esperando:
+            jugadores_esperando.remove(websocket)
+
+async def main():
