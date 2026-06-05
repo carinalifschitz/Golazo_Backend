@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import requests
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from openai import OpenAI
@@ -22,9 +23,7 @@ jugadores_esperando = []
 salas_activas = {}
 RANKING_GLOBAL = {}
 
-app = FastAPI()
-
-# Banco de emergencias obligatorio por si falla la API (Previene el error 502)
+# Banco de emergencias obligatorio por si falla la API
 BANCO_RESPALDO = [
     {"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"},
     {"pregunta": "¿Quién es el máximo goleador de la Selección Argentina?", "opciones": ["Messi", "Maradona", "Batistuta"], "correcta": "Messi"},
@@ -35,7 +34,8 @@ BANCO_RESPALDO = [
 # CONEXIÓN CON API-FOOTBALL (apifootball.com)
 # ----------------------------------------------------------------
 def obtener_datos_futbol_real():
-    url_base = "https://api-sports.io"
+    # CORRECCIÓN 2: URL Base alineada con el Host de la API
+    url_base = "https://v3.football.api-sports.io"
     headers = {
         "x-rapidapi-host": "v3.football.api-sports.io",
         "x-rapidapi-key": FOOTBALL_API_KEY
@@ -47,11 +47,14 @@ def obtener_datos_futbol_real():
         if "response" in res_goleadores:
             for item in res_goleadores["response"][:12]:
                 player = item["player"]
-                statistics = item["statistics"] if isinstance(item["statistics"], list) else item["statistics"]
+                # CORRECCIÓN 1: statistics siempre llega como una LISTA desde API-Football
+                stats_list = item["statistics"]
+                stats = stats_list[0] if isinstance(stats_list, list) and len(stats_list) > 0 else stats_list
+                
                 datos_futbol["goleadores"].append({
                     "nombre": player["name"],
-                    "equipo": statistics["team"]["name"],
-                    "goles": statistics["goals"]["total"],
+                    "equipo": stats["team"]["name"] if "team" in stats else "Desconocido",
+                    "goles": stats["goals"]["total"] if "goals" in stats else 0,
                     "nacionalidad": player["nationality"]
                 })
                 
@@ -95,7 +98,7 @@ async def generar_banco_trivias_ai():
         contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
         
         print("Iniciando solicitud a Grok...")
-        prompt_sistema = "Sos un expertó en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON estructurado que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
+        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON estructurado que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
         prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto_futbol, ensure_ascii=False)} Genera un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones, correcta."
         
         completion = await loop.run_in_executor(
@@ -104,7 +107,7 @@ async def generar_banco_trivias_ai():
                 model="grok-beta", 
                 response_format={"type": "json_object"},
                 messages=[{"role": "system", "content": prompt_sistema}, {"role": "user", "content": prompt_usuario}],
-                timeout=15  # Evita que el servidor se cuelgue si Grok tarda en responder
+                timeout=15
             )
         )
         datos_parseados = json.loads(completion.choices.message.content)
@@ -115,15 +118,18 @@ async def generar_banco_trivias_ai():
     except Exception as e:
         print(f"Fallo controlado en la generación de IA: {e}")
     
-    # Si algo falla arriba, se ejecuta este bloque de seguridad para que la app no muera
     BANCO_TRIVIAS = BANCO_RESPALDO
     print("Cargado banco de emergencias para evitar caídas de servidor.")
 
-# --- EVENTO DE INICIO ---
-@app.on_event("startup")
-async def startup_event():
-    # Lanzamos la tarea de la IA en segundo plano para no congelar el puerto HTTP de Render
+# CORRECCIÓN 3: Reemplazo de @app.on_event por Lifespan (Método moderno)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Código que se ejecuta al iniciar la app
     asyncio.create_task(generar_banco_trivias_ai())
+    yield
+    # Código si quisieras hacer algo al apagar la app (vacío por ahora)
+
+app = FastAPI(lifespan=lifespan)
 
 # --- RUTA 1: INTERFAZ WEB ---
 @app.get("/", response_class=HTMLResponse)
@@ -145,7 +151,6 @@ async def endpoint_websocket(websocket: WebSocket):
     try:
         while True:
             mensaje = await websocket.receive_text()
-            # Aquí va tu lógica interna de salas y juego...
             pass
     except WebSocketDisconnect:
         print("Un jugador se ha desconectado.")
