@@ -20,7 +20,7 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Qué país organizó y ganó el Mundial de fútbol de 1998?", "opciones": ["Francia", "Brasil", "Italia"], "correcta": "Francia"},
     {"pregunta": "¿Cuál es el estadio de fútbol con mayor capacidad de espectadores en Sudamérica?", "opciones": ["Estadio Mâs Monumental", "Estadio Maracaná", "Estadio Centenario"], "correcta": "Estadio Mâs Monumental"},
     {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' en 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
-    {"pregunta": "¿Qué club de la Liga Argentina es known popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
+    {"pregunta": "¿Qué club de la Liga Argentina es conocido popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
     {"pregunta": "¿Quién ganó el Balón de Oro en el año 2023?", "opciones": ["Lionel Messi", "Erling Haaland", "Kylian Mbappé"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Cuál de estos equipos NO descendió nunca de la Primera División de Argentina?", "opciones": ["Boca Juniors", "River Plate", "Independiente"], "correcta": "Boca Juniors"},
     {"pregunta": "¿En qué club de España jugó Juan Román Riquelme además del Barcelona?", "opciones": ["Villarreal", "Sevilla", "Valencia"], "correcta": "Villarreal"},
@@ -39,7 +39,7 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Cómo se llama el trofeo que se entrega al campeón de la liga española?", "opciones": ["Trofeo de LaLiga", "Copa del Rey", "Copa de la Reina"], "correcta": "Trofeo de LaLiga"},
     {"pregunta": "¿Qué selección africana fue la primera en llegar a una semifinal del Mundo?", "opciones": ["Marruecos", "Camerún", "Senegal"], "correcta": "Marruecos"},
     {"pregunta": "¿Quién es el máximo goleador histórico de la UEFA Champions League?", "opciones": ["Cristiano Ronaldo", "Lionel Messi", "Robert Lewandowski"], "correcta": "Cristiano Ronaldo"},
-    {"pregunta": "In qué país se juega el clásico entre Celtic y Rangers?", "opciones": ["Escocia", "Irlanda", "Gales"], "correcta": "Escocia"},
+    {"pregunta": "¿En qué país se juega el clásico entre Celtic y Rangers?", "opciones": ["Escocia", "Irlanda", "Gales"], "correcta": "Escocia"},
     {"pregunta": "¿Qué club de fútbol argentino es conocido como 'La Academia'?", "opciones": ["Racing Club", "San Lorenzo", "Estudiantes"], "correcta": "Racing Club"},
     {"pregunta": "¿Qué número de camiseta usaba Zinedine Zidane en el Real Madrid?", "opciones": ["5", "10", "7"], "correcta": "5"},
     {"pregunta": "¿Quién es el dueño del arco de la Selección Argentina apodado 'Dibu'?", "opciones": ["Emiliano Martínez", "Franco Armani", "Gerónimo Rulli"], "correcta": "Emiliano Martínez"},
@@ -124,3 +124,69 @@ async def obtener_trivias_http():
 
     # 1. Ejecutar llamada a API-Football
     loop = asyncio.get_running_loop()
+    contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+    
+    if not contexto_futbol.get("goleadores"):
+        print("[DIAGNÓSTICO] API-Football vacía/fallida. Armando datos ficticios de control para Grok.")
+        contexto_futbol = {
+            "goleadores": [
+                {"nombre": "Miguel Borja", "equipo": "River Plate"},
+                {"nombre": "Edinson Cavani", "equipo": "Boca Juniors"},
+                {"nombre": "Adrian Martinez", "equipo": "Racing Club"}
+            ]
+        }
+
+    # 2. Ejecutar llamada a Grok
+    try:
+        url_grok = "https://x.ai"
+        headers_grok = {
+            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        prompt_sistema = (
+            "Sos un experto en fútbol. Tu única tarea es responder con un objeto JSON válido. "
+            "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
+            "No devuelvas bloques Markdown ni texto extra."
+        )
+        prompt_usuario = (
+            f"Basándote en estos datos de goleadores actuales: {json.dumps(contexto_futbol, ensure_ascii=False)}. "
+            "Generá un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones (array de 3), correcta."
+        )
+
+        payload = {
+            "model": "grok-2",
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": prompt_usuario}
+            ],
+            "temperature": 0.7
+        }
+
+        print("[DIAGNÓSTICO] ---> Enviando datos al servidor de Grok (x.ai)...")
+        res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=15)
+        
+        print(f"[DIAGNÓSTICO] Grok respondió con Código HTTP: {res.status_code}")
+        
+        if res.status_code == 200:
+            datos_api = res.json()
+            texto_json = datos_api["choices"]["message"]["content"]
+            datos_finales = json.loads(texto_json)
+            
+            if "preguntas" in datos_finales and len(datos_finales["preguntas"]) > 0:
+                print(f"[DIAGNÓSTICO] Grok exitoso: {len(datos_finales['preguntas'])} preguntas listas.")
+                preguntas_mezcladas = datos_finales["preguntas"]
+                random.shuffle(preguntas_mezcladas)
+                return {"preguntas": preguntas_mezcladas}
+        else:
+            print(f"[ALERTA GROK] API rechazada. Respuesta exacta: {res.text}")
+            
+    except Exception as e:
+        print(f"[ALERTA GROK] Error crítico de procesamiento: {e}")
+    
+    print("[SERVER] Flujo fallido. Entregando el mazo por defecto mezclado aleatoriamente.")
+    copia_respaldo = list(BANCO_RESPALDO)
+    random.shuffle(copia_respaldo)
+    return {"preguntas": copia_respaldo}
+
