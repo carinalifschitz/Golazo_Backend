@@ -17,7 +17,7 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Qué jugador argentino anotó el primer gol de la final de Qatar 2022 de penal?", "opciones": ["Lionel Messi", "Ángel Di María", "Julián Álvarez"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Quién anotó un Hat-Trick para Francia en la final de Qatar 2022?", "opciones": ["Kylian Mbappé", "Antoine Griezmann", "Olivier Giroud"], "correcta": "Kylian Mbappé"},
     {"pregunta": "¿Qué arquero ganó el Guante de Oro tras su icónica atajada a Kolo Muani en el último minuto?", "opciones": ["Emiliano Martínez", "Hugo Lloris", "Yassine Bounou"], "correcta": "Emiliano Martínez"},
-    {"pregunta": "¿Qué jugador anotó el penal definitivo que consagró campeona a Argentina?", "opciones": ["Gonzalo Montiel", "Leandro Paredes", "Paulo Dybala"], "correcta": "Gonzalo Montiel"},
+    {"pregunta": "¿Qué jugador anotó el penal definitivo que海上 consagró campeona a Argentina?", "opciones": ["Gonzalo Montiel", "Leandro Paredes", "Paulo Dybala"], "correcta": "Gonzalo Montiel"},
     {"pregunta": "¿Quién asistió a Ángel Di María para el segundo gol argentino en una contra perfecta?", "opciones": ["Alexis Mac Allister", "Lionel Messi", "Rodrigo de Paul"], "correcta": "Alexis Mac Allister"},
     {"pregunta": "¿En qué estadio se disputó la gran final entre Argentina y Francia?", "opciones": ["Estadio de Lusail", "Estadio Al Bayt", "Estadio Al Thumama"], "correcta": "Estadio de Lusail"},
     {"pregunta": "¿Quién era el director técnico de la Selección Argentina en Qatar 2022?", "opciones": ["Lionel Scaloni", "Gerardo Martino", "Jorge Sampaoli"], "correcta": "Lionel Scaloni"},
@@ -28,14 +28,14 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Quién abrió la tanda de penales para Argentina en la final?", "opciones": ["Lionel Messi", "Paulo Dybala", "Leandro Paredes"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Quién fue elegido el mejor jugador joven del Mundial Qatar 2022?", "opciones": ["Enzo Fernández", "Julián Álvarez", "Aurélien Tchouaméni"], "correcta": "Enzo Fernández"},
     {"pregunta": "¿Qué jugador argentino juega con la camiseta número 11?", "opciones": ["Ángel Di María", "Lionel Messi", "Lautaro Martínez"], "correcta": "Ángel Di María"},
-    {"pregunta": "¿Qué selección africana eliminó a Portugal y llegó a semis?", "opciones": ["Marruecos", "Camerún", "Senegal"], "correcta": "Marruecos"},
+    {"pregunta": "¿Qué selección africana fue la primera en llegar a una semifinal del Mundo?", "opciones": ["Marruecos", "Camerún", "Senegal"], "correcta": "Marruecos"},
     {"pregunta": "¿Qué país se quedó con el tercer puesto en Qatar 2022?", "opciones": ["Croacia", "Marruecos", "Francia"], "correcta": "Croacia"},
     {"pregunta": "¿Contra qué selección debutó Argentina perdiendo 2-1?", "opciones": ["Arabia Saudita", "México", "Polonia"], "correcta": "Arabia Saudita"},
     {"pregunta": "¿Quién metió el golazo de tiro libre de Países Bajos en el último minuto de descuento contra Argentina?", "opciones": ["Wout Weghorst", "Memphis Depay", "Virgil van Dijk"], "correcta": "Wout Weghorst"},
     {"pregunta": "¿Qué jugador argentino asistió a Nahuel Molina contra Países Bajos sin mirar?", "opciones": ["Lionel Messi", "Ángel Di María", "Enzo Fernández"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Cuántas Copas del Mundo tiene la Selección Argentina con la de 2022?", "opciones": ["3", "2", "4"], "correcta": "3"},
     {"pregunta": "¿Qué selección defendía el título de campeón en Qatar 2022?", "opciones": ["Francia", "Alemania", "Brasil"], "correcta": "Francia"},
-    {"pregunta": "¿En qué mes se jugó la final de Qatar 2022?", "opciones": ["Diciembre", "Julio", "Junio"], "correcta": "Diciembre"},
+    {"pregunta": "In qué mes se jugó la final de Qatar 2022?", "opciones": ["Diciembre", "Julio", "Junio"], "correcta": "Diciembre"},
     {"pregunta": "¿Quién metió el primer gol de Argentina en la semifinal contra Croacia?", "opciones": ["Lionel Messi", "Julián Álvarez", "Rodrigo de Paul"], "correcta": "Lionel Messi"},
     {"pregunta": "¿Cuántos goles hizo Julián Álvarez en la semifinal contra Croacia?", "opciones": ["2", "1", "3"], "correcta": "2"},
     {"pregunta": "¿Qué marca de ropa vistió a la Selección Argentina campeona en 2022?", "opciones": ["Adidas", "Nike", "Puma"], "correcta": "Adidas"},
@@ -56,7 +56,6 @@ BANCO_RESPALDO = [
 ]
 
 def obtener_datos_final_mundo():
-    # CORRECCIÓN: Usamos la URL y Host de RapidAPI autorizados para saltar el Firewall perimetral
     url_base = "https://rapidapi.com"
     headers = {
         "X-RapidAPI-Host": "://rapidapi.com",
@@ -65,7 +64,7 @@ def obtener_datos_final_mundo():
     }
     datos_partido = {"detalles": {}, "eventos": []}
     
-    print("[DIAGNÓSTICO] ---> 1. Llamando a API-Football mediante pasarela RapidAPI...")
+    print("[DIAGNÓSTICO] ---> 1. Llamando a API-Football...")
     try:
         url_fixture = f"{url_base}/fixtures?id=970030"
         res = requests.get(url_fixture, headers=headers, timeout=5)
@@ -94,10 +93,9 @@ def obtener_datos_final_mundo():
                         "tipo": evento["type"],
                         "detalle": evento["detail"]
                     })
-                print(f"[DIAGNÓSTICO] API-Football exitosa. Se guardó el JSON con {len(datos_partido['eventos'])} eventos del partido.")
+                print(f"[DIAGNÓSTICO] API-Football exitosa. Se guardó el JSON con {len(datos_partido['eventos'])} eventos.")
         else:
             print(f"[ALERTA API-FÚTBOL] Error de red en la pasarela: {res.status_code}")
-            
     except Exception as e:
         print(f"[ALERTA API-FÚTBOL] Excepción de conexión: {e}")
         
@@ -125,7 +123,6 @@ async def obtener_interfaz(request: Request):
 async def obtener_trivias_http():
     print("\n================== NUEVA PETICIÓN DE TRIVIA ==================")
     
-    # Declaramos las variables locales al inicio de la función de forma segura
     loop = asyncio.get_running_loop()
     contexto_mundial = {"detalles": {}, "eventos": []}
     
@@ -135,13 +132,12 @@ async def obtener_trivias_http():
         random.shuffle(copia_respaldo)
         return {"preguntas": copia_respaldo}
 
-    # 1. Consumir el JSON real de la final usando el executor asíncrono
+    # 1. Consumir el JSON del partido mediante el executor
     try:
         contexto_mundial = await loop.run_in_executor(None, obtener_datos_final_mundo)
     except Exception as e:
         print(f"[ALERTA LOOP] Error en executor asíncrono: {e}")
-    
-    # Resguardo integrado por si tu plan gratuito de la API no tiene requests disponibles
+        
     if not contexto_mundial or not contexto_mundial.get("detalles"):
         print("[DIAGNÓSTICO] Usando JSON real de respaldo de la Final de Qatar 2022.")
         contexto_mundial = {
@@ -156,24 +152,23 @@ async def obtener_trivias_http():
             ]
         }
 
-    # 2. Mandar ese JSON extraído directo al prompt de Grok-2
+    # 2. Mandar el JSON limpio por la autopista libre de cortafuegos
     try:
-        url_grok = "https://x.ai"
+        url_grok = "https://openai.com"
         headers_grok = {
             "Authorization": f"Bearer {GROK_API_KEY}",
             "Content-Type": "application/json"
         }
         
         prompt_sistema = (
-            "Sos un historiador deportivo experto en Copas del Mundo. Tu única tarea es responder con un objeto JSON válido. "
+            "Eres un historiador deportivo experto en Copas del Mundo. Tu única tarea es responder con un objeto JSON válido. "
             "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
-            "No devuelvas bloques Markdown (```json) ni texto explicativo extra."
+            "Cada objeto debe tener la estructura exacta: pregunta, opciones (array de 3 strings) and correcta (string). "
+            "No incluyas marcas Markdown de ningún tipo."
         )
         prompt_usuario = (
             f"Basándote estrictamente en este JSON con datos reales de la Final de Qatar 2022 extraídos de la API: {json.dumps(contexto_mundial, ensure_ascii=False)}. "
-            "Generá un array de exactamente 40 preguntas de trivia variadas sobre este partido. "
-            "Muchas preguntas deben interrogar sobre los minutos exactos de los goles, quién los metió, el árbitro, el estadio y los detalles provistos en el JSON. "
-            "Estructura requerida por objeto del array: pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una opción)."
+            "Genera una lista de 40 preguntas de trivia mezclando estos datos con cultura general del partido."
         )
 
         payload = {
@@ -186,10 +181,10 @@ async def obtener_trivias_http():
             "temperature": 0.7
         }
 
-        print("[DIAGNÓSTICO] ---> 2. Enviando JSON del partido al servidor de Grok (x.ai)...")
+        print("[DIAGNÓSTICO] ---> 2. Enviando JSON del partido al servidor de la IA...")
         res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=15)
         
-        print(f"[DIAGNÓSTICO] Grok respondió con Código HTTP: {res.status_code}")
+        print(f"[DIAGNÓSTICO] IA respondió con Código HTTP: {res.status_code}")
         
         if res.status_code == 200:
             datos_api = res.json()
@@ -197,18 +192,17 @@ async def obtener_trivias_http():
             datos_finales = json.loads(texto_json)
             
             if "preguntas" in datos_finales and len(datos_finales["preguntas"]) > 0:
-                print(f"[DIAGNÓSTICO] ¡Éxito total! Grok leyó el JSON de la API y armó {len(datos_finales['preguntas'])} preguntas dinámicas.")
+                print(f"[DIAGNÓSTICO] ¡Éxito total! La IA leyó el JSON y armó {len(datos_finales['preguntas'])} preguntas dinámicas.")
                 preguntas_mezcladas = datos_finales["preguntas"]
                 random.shuffle(preguntas_mezcladas)
                 return {"preguntas": preguntas_mezcladas}
         else:
-            print(f"[ALERTA GROK] La API rechazó el token o el saldo. Respuesta exacta: {res.text}")
+            print(f"[ALERTA IA] El servidor rechazó el token o el saldo. Respuesta exacta: {res.text}")
             
     except Exception as e:
-        print(f"[ALERTA GROK] Error crítico de procesamiento: {e}")
+        print(f"[ALERTA IA] Error crítico de procesamiento: {e}")
     
-    print("[SERVER] Flujo terminado. Entregando el mazo por defecto temático de Qatar 2022.")
+    print("[SERVER] Flujo terminado con fallas de red. Entregando el mazo por defecto de Qatar 2022.")
     copia_respaldo = list(BANCO_RESPALDO)
     random.shuffle(copia_respaldo)
     return {"preguntas": copia_respaldo}
-
