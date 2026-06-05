@@ -34,15 +34,6 @@
             max-width: 550px;
         }
         h1 { text-align: center; color: #3b82f6; margin-top: 0; }
-        .status {
-            font-size: 0.85rem;
-            background: rgba(255,255,255,0.05);
-            padding: 8px 12px;
-            border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
         .screen { display: none; }
         .active { display: block; }
         .btn {
@@ -75,32 +66,23 @@
         .feedback { text-align: center; font-size: 1.2rem; font-weight: bold; margin: 15px 0; min-height: 28px; }
         .correct { color: var(--success); }
         .incorrect { color: var(--error); }
-        .ranking { margin-top: 25px; border-top: 1px solid #374151; padding-top: 15px; }
-        .ranking h3 { margin: 0 0 10px 0; font-size: 1rem; color: var(--text-muted); }
-        .ranking-list { list-style: none; padding: 0; margin: 0; }
-        .ranking-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 0.9rem; }
+        .ranking { margin-top: 25px; border-top: 1px solid #374151; padding-top: 15px; text-align: center; }
+        .ranking h3 { margin: 0 0 5px 0; font-size: 1rem; color: var(--text-muted); }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h1>⚽ Fútbol Trivia IA</h1>
-        
-        <div class="status">
-            <span>Server: <strong id="net-status" style="color: var(--error)">Conectando...</strong></span>
-            <span id="room">Modo: Ninguno</span>
-        </div>
 
         <!-- MENU -->
         <div id="scr-menu" class="screen active">
-            <button class="btn" onclick="solicitarPreguntaIndividual()">Jugar Modo Individual (40 Preguntas)</button>
-            <button class="btn" style="background:#8b5cf6;" onclick="buscarMatch()">Buscar Partida Versus</button>
+            <button class="btn" onclick="iniciarJuego()">Jugar Modo Trivia (40 Preguntas)</button>
         </div>
 
-        <!-- ESPERA -->
+        <!-- CARGANDO -->
         <div id="scr-wait" class="screen">
-            <p style="text-align:center;" id="wait-msg">Buscando rival en el servidor...</p>
-            <button class="btn" style="background:#4b5563;" onclick="cancelar()">Volver</button>
+            <p style="text-align:center; font-size: 1.2rem;">Generando preguntas en tiempo real con IA...</p>
         </div>
 
         <!-- TRIVIA -->
@@ -111,134 +93,96 @@
             <button id="btn-next-action" class="btn btn-next" onclick="avanzarPregunta()">Siguiente Pregunta ➡️</button>
         </div>
 
-        <!-- RANKING / PUNTOS -->
+        <!-- MARCADOR -->
         <div class="ranking">
-            <h3>🏆 Marcador de la Partida</h3>
-            <ul id="rank-list" class="ranking-list">
-                <li class="ranking-item"><span>Tu Puntaje (Local)</span><strong id="local-score">0 pts</strong></li>
-                <li class="ranking-item" id="rival-row" style="display:none;"><span>Rival</span><strong id="rival-score">0 pts</strong></li>
-            </ul>
+            <h3>🏆 Puntuación Actual</h3>
+            <strong id="local-score" style="font-size: 1.3rem; color: var(--success);">0 pts</strong>
         </div>
     </div>
 
     <script>
-        const protocolo = window.location.protocol === "https:" ? "wss://" : "ws://";
-        const hostServidor = window.location.host ? window.location.host : "localhost:8000";
-        const URL_WS = protocolo + hostServidor + "/ws";
-
-        let socket;
-        let salaId = "";
-        let modoEsMultijugador = false;
-        let puntosLocal = 0;
-        let puntosRival = 0;
-        
-        // Control unificado del array de preguntas
         let preguntasPartida = [];
         let indicePreguntaActual = 0;
         let preguntaActualObj = null;
+        let puntosLocal = 0;
 
         const BANCO_NATIVO = [
             {"pregunta": "¿Qué equipo venció al Real Madrid en la Intercontinental del 2000?", "opciones": ["Boca Juniors", "River Plate", "Palmeiras"], "correcta": "Boca Juniors"},
-            {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"},
-            {"pregunta": "¿En qué club europeo debutó el Kun Agüero?", "opciones": ["Atlético de Madrid", "Manchester City", "Barcelona"], "correcta": "Atlético de Madrid"}
+            {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"}
         ];
-
-        function conectarWebSocket() {
-            socket = new WebSocket(URL_WS);
-
-            socket.onopen = () => {
-                document.getElementById("net-status").innerText = "Conectado";
-                document.getElementById("net-status").style.color = "var(--success)";
-            };
-
-            socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                
-                // Procesar lote completo de preguntas individuales
-                if (msg.tipo === "banco_individual") {
-                    iniciarJuegoLocal(msg.preguntas);
-                } 
-                // Procesar lote completo de preguntas Versus
-                else if (msg.tipo === "match_encontrado") {
-                    iniciarPartidaVersus(msg.salaId, msg.preguntas);
-                }
-                else if (msg.tipo === "actualizacion_rival") {
-                    puntosRival = msg.puntos_rival;
-                    document.getElementById("rival-score").innerText = `${puntosRival} pts`;
-                }
-                else if (msg.tipo === "rival_desconectado") {
-                    alert("¡Tu rival abandonó la partida! Ganás por abandono.");
-                    volverAlMenu();
-                }
-            };
-
-            socket.onclose = () => {
-                document.getElementById("net-status").innerText = "Desconectado";
-                document.getElementById("net-status").style.color = "var(--error)";
-                setTimeout(conectarWebSocket, 3000);
-            };
-        }
 
         function cambiarPantalla(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
         }
 
-        // --- INICIALIZAR MODO INDIVIDUAL ---
-        function solicitarPreguntaIndividual() {
-            modoEsMultijugador = false;
-            salaId = "";
+        async function iniciarJuego() {
             puntosLocal = 0;
             indicePreguntaActual = 0;
-            document.getElementById("room").innerText = "Modo: Individual";
-            document.getElementById("rival-row").style.display = "none";
             document.getElementById("local-score").innerText = "0 pts";
-            
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ "accion": "solicitar_individual" }));
-            } else {
-                // Respaldo inmediato si el WS cae
-                iniciarJuegoLocal(BANCO_NATIVO);
-            }
-        }
-
-        function iniciarJuegoLocal(preguntas Recibidas) {
-            preguntasPartida = preguntasRecibidas;
-            renderizarPreguntaActual();
-        }
-
-        // --- INICIALIZAR MODO VERSUS ---
-        function buscarMatch() {
-            modoEsMultijugador = true;
             cambiarPantalla("scr-wait");
-            document.getElementById("wait-msg").innerText = "Buscando un rival digno...";
-            
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ "accion": "buscar_match" }));
-            } else {
-                alert("No estás conectado al servidor.");
-                volverAlMenu();
+
+            try {
+                // Petición HTTP Clásica al backend de Render
+                const respuesta = await fetch("/api/trivias");
+                const datos = await respuesta.json();
+                preguntasPartida = datos.preguntas && datos.preguntas.length > 0 ? datos.preguntas : BANCO_NATIVO;
+            } catch (error) {
+                console.log("Error de conexión, usando banco nativo.");
+                preguntasPartida = BANCO_NATIVO;
             }
-        }
-
-        function iniciarPartidaVersus(idSala, preguntas) {
-            salaId = idSala;
-            preguntasPartida = preguntas;
-            indicePreguntaActual = 0;
-            puntosLocal = 0;
-            puntosRival = 0;
-
-            document.getElementById("room").innerText = `Sala: ${salaId}`;
-            document.getElementById("local-score").innerText = "0 pts";
-            document.getElementById("rival-score").innerText = "0 pts";
-            document.getElementById("rival-row").style.display = "flex";
 
             renderizarPreguntaActual();
         }
 
-        // --- RENDERIZADO UNIFICADO DE PREGUNTAS (1 A 40) ---
         function renderizarPreguntaActual() {
             cambiarPantalla("scr-trivia");
             preguntaActualObj = preguntasPartida[indicePreguntaActual];
 
-            // Muestra dinámicamente el progreso real (Ej: [1/40])
+            document.getElementById("box-question").innerText = `[${indicePreguntaActual + 1}/${preguntasPartida.length}] ${preguntaActualObj.pregunta}`;
+            
+            const containerOptions = document.getElementById("box-options");
+            containerOptions.innerHTML = "";
+            document.getElementById("box-feedback").innerText = "";
+            document.getElementById("btn-next-action").style.display = "none";
+
+            preguntaActualObj.opciones.forEach(opcion => {
+                const btn = document.createElement("button");
+                btn.className = "btn btn-option";
+                btn.innerText = opcion;
+                btn.onclick = () => verificarRespuesta(opcion);
+                containerOptions.appendChild(btn);
+            });
+        }
+
+        function verificarRespuesta(opcionSeleccionada) {
+            document.querySelectorAll(".btn-option").forEach(b => b.disabled = true);
+            const feedback = document.getElementById("box-feedback");
+            
+            if (opcionSeleccionada === preguntaActualObj.correcta) {
+                feedback.innerText = "¡Correcto! 🚀";
+                feedback.className = "feedback correct";
+                puntosLocal += 10;
+                document.getElementById("local-score").innerText = `${puntosLocal} pts`;
+            } else {
+                feedback.innerText = `Incorrecto. Era: ${preguntaActualObj.correcta}`;
+                feedback.className = "feedback incorrect";
+            }
+
+            const esUltima = (indicePreguntaActual === preguntasPartida.length - 1);
+            document.getElementById("btn-next-action").innerText = esUltima ? "Ver Resultados Finales 🏁" : "Siguiente Pregunta ➡️";
+            document.getElementById("btn-next-action").style.display = "block";
+        }
+
+        function avanzarPregunta() {
+            indicePreguntaActual++;
+            if (indicePreguntaActual < preguntasPartida.length) {
+                renderizarPreguntaActual();
+            } else {
+                alert(`¡Juego terminado! Lograste un total de: ${puntosLocal} pts.`);
+                cambiarPantalla("scr-menu");
+            }
+        }
+    </script>
+</body>
+</html>
