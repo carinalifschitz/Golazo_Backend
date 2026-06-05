@@ -24,6 +24,13 @@ RANKING_GLOBAL = {}
 
 app = FastAPI()
 
+# Banco de emergencias obligatorio por si falla la API (Previene el error 502)
+BANCO_RESPALDO = [
+    {"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"},
+    {"pregunta": "¿Quién es el máximo goleador de la Selección Argentina?", "opciones": ["Messi", "Maradona", "Batistuta"], "correcta": "Messi"},
+    {"pregunta": "¿Cuál es el estadio de Boca Juniors?", "opciones": ["La Bombonera", "El Monumental", "El Cilindro"], "correcta": "La Bombonera"}
+]
+
 # ----------------------------------------------------------------
 # CONEXIÓN CON API-FOOTBALL (apifootball.com)
 # ----------------------------------------------------------------
@@ -36,7 +43,7 @@ def obtener_datos_futbol_real():
     datos_futbol = {"goleadores": [], "estadios": [], "partidos_jugados": []}
     try:
         url_goleadores = f"{url_base}/players/topscorers?league=128&season=2026"
-        res_goleadores = requests.get(url_goleadores, headers=headers, timeout=10).json()
+        res_goleadores = requests.get(url_goleadores, headers=headers, timeout=5).json()
         if "response" in res_goleadores:
             for item in res_goleadores["response"][:12]:
                 player = item["player"]
@@ -49,7 +56,7 @@ def obtener_datos_futbol_real():
                 })
                 
         url_equipos = f"{url_base}/teams?league=128&season=2026"
-        res_equipos = requests.get(url_equipos, headers=headers, timeout=10).json()
+        res_equipos = requests.get(url_equipos, headers=headers, timeout=5).json()
         if "response" in res_equipos:
             for item in res_equipos["response"][:12]:
                 team = item["team"]
@@ -62,7 +69,7 @@ def obtener_datos_futbol_real():
                 })
 
         url_fixtures = f"{url_base}/fixtures?league=128&season=2026&status=FT"
-        res_fixtures = requests.get(url_fixtures, headers=headers, timeout=10).json()
+        res_fixtures = requests.get(url_fixtures, headers=headers, timeout=5).json()
         if "response" in res_fixtures:
             for item in res_fixtures["response"][-15:]:
                 teams = item["teams"]
@@ -77,67 +84,68 @@ def obtener_datos_futbol_real():
                     "ciudad": fixture_venue["city"]
                 })
     except Exception as e:
-        print(f"Error al recolectar datos de API-Football: {e}")
+        print(f"Error controlado al recolectar datos de API-Football: {e}")
     return datos_futbol
 
 async def generar_banco_trivias_ai():
     global BANCO_TRIVIAS
-    print("Obteniendo estadísticas desde API-Football...")
-    loop = asyncio.get_running_loop()
-    contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
-    print("Iniciando solicitud a Grok...")
-
-    prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON estructurado que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
-    prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto_futbol, ensure_ascii=False)} Genera un array de exactamente 40 preguntas de trivia de fútbol con estructura: pregunta, opciones, correcta."
-    
     try:
+        print("Obteniendo estadísticas desde API-Football...")
+        loop = asyncio.get_running_loop()
+        contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+        
+        print("Iniciando solicitud a Grok...")
+        prompt_sistema = "Sos un expertó en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON estructurado que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown."
+        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto_futbol, ensure_ascii=False)} Genera un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones, correcta."
+        
         completion = await loop.run_in_executor(
             None,
             lambda: client.chat.completions.create(
                 model="grok-beta", 
                 response_format={"type": "json_object"},
-                messages=[{"role": "system", "content": prompt_sistema}, {"role": "user", "content": prompt_usuario}]
+                messages=[{"role": "system", "content": prompt_sistema}, {"role": "user", "content": prompt_usuario}],
+                timeout=15  # Evita que el servidor se cuelgue si Grok tarda en responder
             )
         )
         datos_parseados = json.loads(completion.choices.message.content)
         if "preguntas" in datos_parseados:
             BANCO_TRIVIAS = datos_parseados["preguntas"]
             print(f"¡Éxito! Se inyectaron {len(BANCO_TRIVIAS)} preguntas.")
+            return
     except Exception as e:
-        print(f"Fallo crítico en la generación de IA: {e}")
-        BANCO_TRIVIAS = [{"pregunta": "¿Quién ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"}]
+        print(f"Fallo controlado en la generación de IA: {e}")
+    
+    # Si algo falla arriba, se ejecuta este bloque de seguridad para que la app no muera
+    BANCO_TRIVIAS = BANCO_RESPALDO
+    print("Cargado banco de emergencias para evitar caídas de servidor.")
 
-# ----------------------------------------------------------------
-# EVENTO DE INICIO DEL SERVIDOR
-# ----------------------------------------------------------------
+# --- EVENTO DE INICIO ---
 @app.on_event("startup")
 async def startup_event():
-    # Descarga las preguntas al encender el contenedor
-    await generar_banco_trivias_ai()
+    # Lanzamos la tarea de la IA en segundo plano para no congelar el puerto HTTP de Render
+    asyncio.create_task(generar_banco_trivias_ai())
 
-# ----------------------------------------------------------------
-# RUTA 1: SERVIR EL ARCHIVO HTML (PÁGINA WEB)
-# ----------------------------------------------------------------
+# --- RUTA 1: INTERFAZ WEB ---
 @app.get("/", response_class=HTMLResponse)
 async def obtener_interfaz():
-    # Buscamos el archivo index.html en la misma carpeta del proyecto
-    ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
-    if os.path.exists(ruta_html):
-        with open(ruta_html, "r", encoding="utf-8") as archivo:
-            return HTMLResponse(content=archivo.read(), status_code=200)
-    return HTMLResponse(content="<h1>Error: No se encontró el archivo index.html en el servidor.</h1>", status_code=404)
+    try:
+        ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
+        if os.path.exists(ruta_html):
+            with open(ruta_html, "r", encoding="utf-8") as archivo:
+                return HTMLResponse(content=archivo.read(), status_code=200)
+    except Exception as e:
+        print(f"Error al leer HTML: {e}")
+    
+    return HTMLResponse(content="<h1>⚽ Servidor Activo (El archivo index.html se está subiendo o procesando)</h1>", status_code=200)
 
-# ----------------------------------------------------------------
-# RUTA 2: PUNTO DE ENTRADA DEL WEBSOCKET (/ws)
-# ----------------------------------------------------------------
+# --- RUTA 2: WEBSOCKET ---
 @app.websocket("/ws")
 async def endpoint_websocket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
             mensaje = await websocket.receive_text()
-            datos = json.loads(mensaje)
-            # Aquí procesas tus salas y mecánicas de juego pasadas...
+            # Aquí va tu lógica interna de salas y juego...
             pass
     except WebSocketDisconnect:
         print("Un jugador se ha desconectado.")
