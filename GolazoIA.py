@@ -101,7 +101,7 @@ def consultar_api_futbol_masivo():
 def generar_trivia_de_partido(partido_raw):
     """Envía el JSON del partido a Grok para formatear una pregunta válida."""
     partido_string = json.dumps(partido_raw)
-    prompt = f"""
+    prompt = f""" te paso el codigo import asyncio
     Basándote estrictamente en los datos estructurados de este partido de fútbol en formato JSON:
     {partido_string}
     Generá UNA pregunta de trivia que sea sumamente variada y específica. 
