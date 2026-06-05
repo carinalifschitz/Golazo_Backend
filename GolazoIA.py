@@ -118,4 +118,24 @@ async def obtener_trivias_http():
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": prompt_sistema},
-                {"role": "user", "content": prompt_usuario}]}res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=12)if res.status_code == 200:datos = res.json()contenido_texto = datos["choices"]["message"]["content"]datos_parseados = json.loads(contenido_texto)if "preguntas" in datos_parseados and len(datos_parseados["preguntas"]) > 0:print("¡Éxito! 40 preguntas nuevas generadas por Grok.")return {"preguntas": datos_parseados["preguntas"]}else:print(f"Error de Grok: Código {res.status_code} - {res.text}")except Exception as e:print(f"Error al conectar con Grok: {e}")return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
+                {"role": "user", "content": prompt_usuario}
+            ]
+        }
+
+        res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=12)
+        
+        if res.status_code == 200:
+            datos = res.json()
+            contenido_texto = datos["choices"]["message"]["content"]
+            datos_parseados = json.loads(contenido_texto)
+            
+            if "preguntas" in datos_parseados and len(datos_parseados["preguntas"]) > 0:
+                print("¡Éxito! 40 preguntas nuevas generadas por Grok.")
+                return {"preguntas": datos_parseados["preguntas"]}
+        else:
+            print(f"Error de Grok: Código {res.status_code} - {res.text}")
+            
+    except Exception as e:
+        print(f"Error al conectar con Grok: {e}")
+    
+    return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
