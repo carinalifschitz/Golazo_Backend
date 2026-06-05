@@ -181,8 +181,17 @@ async def manejador_websocket(websocket):
 async def main():
     await generar_banco_trivias_ai()
 
+    # Leemos el puerto dinámico de Render
     puerto = int(os.environ.get("PORT", 10000))
-    async with websockets.serve(manejador_websocket, "0.0.0.0", puerto):
+    
+    # Agregamos parámetros de compatibilidad para proxies inversos como Render
+    async with websockets.serve(
+        manejador_websocket, 
+        "0.0.0.0", 
+        puerto,
+        ping_interval=20,  # Evita que Render te cierre la conexión por inactividad
+        ping_timeout=20
+    ):
         print(f"Servidor WebSocket escuchando en el puerto {puerto}")
         await asyncio.Future() 
 
