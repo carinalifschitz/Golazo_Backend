@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fútbol Trivia IA</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151f32;
+            --primary: #2563eb;
+            --success: #10b981;
+            --error: #ef4444;
+            --text: #f3f4f6;
+            --text-muted: #6b7280;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 550px;
+        }
+        h1 { text-align: center; color: #3b82f6; margin-top: 0; }
+        .status {
+            font-size: 0.85rem;
+            background: rgba(255,255,255,0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .screen { display: none; }
+        .active { display: block; }
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-option {
+            background-color: #1f293d;
+            text-align: left;
+            border: 1px solid #374151;
+        }
+        .btn-option:hover { background-color: #2d3748; }
+        .btn-next {
+            background-color: #10b981;
+            display: none;
+            margin-top: 15px;
+        }
+        .question { font-size: 1.25rem; font-weight: bold; margin-bottom: 25px; line-height: 1.4; }
+        .feedback { text-align: center; font-size: 1.2rem; font-weight: bold; margin: 15px 0; min-height: 28px; }
+        .correct { color: var(--success); }
+        .incorrect { color: var(--error); }
+        .ranking { margin-top: 25px; border-top: 1px solid #374151; padding-top: 15px; }
+        .ranking h3 { margin: 0 0 10px 0; font-size: 1rem; color: var(--text-muted); }
+        .ranking-list { list-style: none; padding: 0; margin: 0; }
+        .ranking-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>⚽ Fútbol Trivia IA</h1>
+        
+        <div class="status">
+            <span>Server: <strong id="net-status" style="color: var(--error)">Desconectado</strong></span>
+            <span id="room"></span>
+        </div>
+
+        <!-- MENU -->
+        <div id="scr-menu" class="screen active">
+            <button class="btn" onclick="solicitarPreguntaIndividual()">Jugar Modo Individual</button>
+            <button class="btn" style="background:#8b5cf6;" onclick="buscarMatch()">Buscar Partida Versus</button>
+        </div>
+
+        <!-- ESPERA -->
+        <div id="scr-wait" class="screen">
+            <p style="text-align:center;" id="wait-msg">Buscando rival...</p>
+            <button class="btn" style="background:#4b5563;" onclick="cancelar()">Volver</button>
+        </div>
+
+        <!-- TRIVIA -->
+        <div id="scr-trivia" class="screen">
+            <div id="box-question" class="question"></div>
+            <div id="box-options"></div>
+            <div id="box-feedback" class="feedback"></div>
+            <button id="btn-next-action" class="btn btn-next" onclick="solicitarPreguntaIndividual()">Siguiente Pregunta ➡️</button>
+        </div>
+
+        <!-- RANKING -->
+        <div class="ranking">
+            <h3>🏆 Posiciones</h3>
+            <ul id="rank-list" class="ranking-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        const URL_WS = "ws://localhost:8765";
+        let socket;
+        let salaId = "";
+        let modoEsMultijugador = false;
+
+        function iniciarConexion() {
+            socket = new WebSocket(URL_WS);
+            socket.onopen = () => {
+                document.getElementById("net-status").textContent = "Conectado";
+                document.getElementById("net-status").style.color = "var(--success)";
+            };
+            socket.onclose = () => {
+                document.getElementById("net-status").textContent = "Desconectado";
+                document.getElementById("net-status").style.color = "var(--error)";
+                setTimeout(iniciarConexion, 2000);
+            };
+            socket.onmessage = (e) => {
+                const res = JSON.parse(e.data);
+                
+                if (res.tipo === "status") {
+                    cambiarPantalla("scr-wait");
+                    document.getElementById("wait-msg").textContent = res.mensaje;
+                }
+                else if (res.tipo === "trivia" || res.tipo === "inicio_multijugador") {
+                    salaId = res.id_sala || "";
+                    modoEsMultijugador = (res.tipo === "inicio_multijugador");
+                    document.getElementById("room").textContent = salaId ? `Sala: ${salaId}` : "";
+                    renderizarPregunta(res.datos);
+                }
+                else if (res.tipo === "resultado") {
+                    renderizarFeedback(res.correcto);
+                    renderizarRanking(res.ranking_global);
+                }
+                else if (res.tipo === "fin_partida") {
+                    cambiarPantalla("scr-wait");
+                    document.getElementById("wait-msg").innerHTML = `🏁 Partida Terminada<br><br>Ganador: <strong>${res.ganador}</strong>`;
+                    renderizarRanking(res.ranking_global);
+                }
+            };
+        }
+
+        function solicitarPreguntaIndividual() {
+            modoEsMultijugador = false;
+            salaId = "";
+            socket.send(JSON.stringify({ accion: "jugar_individual" }));
+        }
+
+        function buscarMatch() {
+            socket.send(JSON.stringify({ accion: "buscar_partida_multijugador" }));
+        }
+
+        function responder(opcion) {
+            document.querySelectorAll(".btn-option").forEach(b => b.disabled = true);
+            
+            socket.send(JSON.stringify({
+                accion: "responder",
+                id_sala: salaId,
+                eleccion: opcion
+            }));
+        }
+
+        function renderizarPregunta(datos) {
+            cambiarPantalla("scr-trivia");
+            document.getElementById("box-feedback").textContent = "";
+            document.getElementById("box-feedback").className = "feedback";
+            document.getElementById("btn-next-action").style.display = "none";
+
+            document.getElementById("box-question").textContent = datos.pregunta;
+            const contenedor = document.getElementById("box-options");
+            contenedor.innerHTML = "";
+
+            datos.opciones.forEach(opt => {
+                const btn = document.createElement("button");
+                btn.className = "btn btn-option";
+                btn.textContent = opt;
+                btn.onclick = () => responder(opt);
+                contenedor.appendChild(btn);
+            });
+        }
+
+        function renderizarFeedback(correcto) {
+            const f = document.getElementById("box-feedback");
+            if (correcto) {
+                f.textContent = "¡Respuesta Correcta! (+100 pts)";
+                f.className = "feedback correct";
+            } else {
+                f.textContent = "Respuesta Incorrecta ❌";
+                f.className = "feedback incorrect";
+            }
+
+            if (!modoEsMultijugador) {
+                document.getElementById("btn-next-action").style.display = "block";
+            }
+        }
+
+        function renderizarRanking(global) {
+            const lista = document.getElementById("rank-list");
+            lista.innerHTML = "";
+            Object.entries(global)
+                .sort((a,b) => b - a)
+                .forEach(([user, pts]) => {
+                    lista.innerHTML += `<li class="ranking-item"><span>👤 ${user}</span><strong>${pts} pts</strong></li>`;
+                });
+        }
+
+        function cambiarPantalla(id) {
+            document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+            document.getElementById(id).classList.add("active");
+        }
+
+        function cancelar() {
+            if(socket) socket.close();
+            cambiarPantalla("scr-menu");
+        }
+
+        window.onload = iniciarConexion;
+    </script>
+</body>
+</html>
