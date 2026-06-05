@@ -9,99 +9,182 @@ from openai import OpenAI
 import websockets
 
 # --- CONFIGURACIÓN DE CREDENCIALES ---
-# Reemplazá estos textos con tus claves reales si querés usar la Inteligencia Artificial
 GROK_API_KEY = os.environ.get("GROK_API_KEY", "TU_API_KEY_DE_GROK")
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "TU_API_KEY_DE_API_FOOTBALL")
 
 client = OpenAI(
     api_key=GROK_API_KEY, 
-    base_url="https://xai.tech"
+    base_url="https://x.ai"
 )
 
-# --- VARIABLES DE CONTROL Y BANCO DE TRIVIAS NATIVO (40 PREGUNTAS) ---
-BANCO_TRIVIAS = [
-    {"pregunta": "¿Qué equipo se consagró campeón del mundo de clubes al vencer al Real Madrid en el año 2000?", "opciones": ["Boca Juniors", "River Plate", "Palmeiras"], "correcta": "Boca Juniors"},
-    {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"},
-    {"pregunta": "¿En qué club europeo debutó profesionalmente Sergio 'Kun' Agüero?", "opciones": ["Atlético de Madrid", "Manchester City", "Barcelona"], "correcta": "Atlético de Madrid"},
-    {"pregunta": "¿Quién fue el director técnico de la Selección Argentina en el Mundial de Sudáfrica 2010?", "opciones": ["Diego Maradona", "Alejandro Sabella", "Alfio Basile"], "correcta": "Diego Maradona"},
-    {"pregunta": "¿Qué país organizó y ganó el Mundial de fútbol de 1998?", "opciones": ["Francia", "Brasil", "Italia"], "correcta": "Francia"},
-    {"pregunta": "¿Cuál es el estadio de fútbol con mayor capacidad de espectadores en Sudamérica?", "opciones": ["Estadio Mâs Monumental", "Estadio Maracaná", "Estadio Centenario"], "correcta": "Estadio Mâs Monumental"},
-    {"pregunta": "¿Quién anotó el famoso gol conocido como 'La mano de Dios' en 1986?", "opciones": ["Diego Maradona", "Jorge Burruchaga", "Gary Lineker"], "correcta": "Diego Maradona"},
-    {"pregunta": "¿Qué club de la Liga Argentina es conocido popularmente como 'El Taladro'?", "opciones": ["Banfield", "Lanús", "Temperley"], "correcta": "Banfield"},
-    {"pregunta": "¿Quién ganó el Balón de Oro de la FIFA en el año 2023?", "opciones": ["Lionel Messi", "Erling Haaland", "Kylian Mbappé"], "correcta": "Lionel Messi"},
-    {"pregunta": "¿Cuál de estos equipos NO descendió nunca de la Primera División de Argentina?", "opciones": ["Boca Juniors", "River Plate", "Independiente"], "correcta": "Boca Juniors"},
-    {"pregunta": "¿En qué club de España jugó el mediocampista Juan Román Riquelme además del Barcelona?", "opciones": ["Villarreal", "Sevilla", "Valencia"], "correcta": "Villarreal"},
-    {"pregunta": "¿Quién fue el goleador del Mundial de Qatar 2022?", "opciones": ["Kylian Mbappé", "Lionel Messi", "Julián Álvarez"], "correcta": "Kylian Mbappé"},
-    {"pregunta": "¿Qué equipo del fútbol argentino tiene el récord de más campeonatos de Copa Libertadores ganados?", "opciones": ["Independiente", "Boca Juniors", "Estudiantes de La Plata"], "correcta": "Independiente"},
-    {"pregunta": "¿Qué jugador argentino ganó la Champions League con el Inter de Milán anotando dos goles en la final de 2010?", "opciones": ["Diego Milito", "Javier Zanetti", "Esteban Cambiasso"], "correcta": "Diego Milito"},
-    {"pregunta": "¿En qué año se inauguró el actual Estadio Alberto J. Armando, conocido como La Bombonera?", "opciones": ["1940", "1950", "1931"], "correcta": "1940"},
-    {"pregunta": "¿Cuál fue el resultado de la final del Mundial de Alemania 2006 entre Italia y Francia en los 120 minutos?", "opciones": ["1-1", "0-0", "2-1"], "correcta": "1-1"},
-    {"pregunta": "¿Qué futbolista es conocido mundialmente como 'O Rei'?", "opciones": ["Pelé", "Garrincha", "Ronaldinho"], "correcta": "Pelé"},
-    {"pregunta": "¿Quién es el director técnico actual de la Selección Mayor de Argentina?", "opciones": ["Lionel Scaloni", "Jorge Sampaoli", "Gerardo Martino"], "correcta": "Lionel Scaloni"},
-    {"pregunta": "¿Qué club inglés es conocido como los 'Red Devils'?", "opciones": ["Manchester United", "Liverpool", "Arsenal"], "correcta": "Manchester United"},
-    {"pregunta": "¿En qué club de la MLS juega actualmente el capitán argentino Lionel Messi?", "opciones": ["Inter Miami", "LA Galaxy", "New York City FC"], "correcta": "Inter Miami"},
-    {"pregunta": "¿Qué número de camiseta usó principalmente Ángel Di María en la Selección Argentina?", "opciones": ["11", "7", "10"], "correcta": "11"},
-    {"pregunta": "¿Contra qué país debutó oficialmente Diego Maradona en un Mundial de Fútbol (España 1982)?", "opciones": ["Bélgica", "Hungría", "El Salvador"], "correcta": "Bélgica"},
-    {"pregunta": "¿Cuál de estos países ha ganado exactamente CUATRO copas mundiales de la FIFA?", "opciones": ["Alemania", "Brasil", "Argentina"], "correcta": "Alemania"},
-    {"pregunta": "¿Qué jugador pateó el penal decisivo contra Francia en la final del mundo de Qatar 2022?", "opciones": ["Gonzalo Montiel", "Leandro Paredes", "Lautaro Martínez"], "correcta": "Gonzalo Montiel"},
-    {"pregunta": "¿Qué histórico defensor argentino es apodado 'El Ratón'?", "opciones": ["Roberto Ayala", "Walter Samuel", "Gabriel Heinze"], "correcta": "Roberto Ayala"},
-    {"pregunta": "¿Qué club de fútbol de Córdoba es apodado 'El Pirata'?", "opciones": ["Belgrano", "Talleres", "Instituto"], "correcta": "Belgrano"},
-    {"pregunta": "¿Cuál es el clásico rival histórico de San Lorenzo de Almagro?", "opciones": ["Huracán", "Velez Sarsfield", "Ferro"], "correcta": "Huracán"},
-    {"pregunta": "¿Quién es el arquero titular de la Selección Argentina campeona del mundo en 2022?", "opciones": ["Emiliano Martínez", "Franco Armani", "Gerónimo Rulli"], "correcta": "Emiliano Martínez"},
-    {"pregunta": "¿En qué país se disputó la Copa del Mundo de 1994?", "opciones": ["Estados Unidos", "México", "Italia"], "correcta": "Estados Unidos"},
-    {"pregunta": "¿Qué club de Primera División tiene su estadio bautizado como 'Libertadores de América'?", "opciones": ["Independiente", "Racing Club", "Estudiantes de La Plata"], "correcta": "Independiente"},
-    {"pregunta": "¿Quién fue el arquero de la Selección Argentina en la final del Mundial de Brasil 2014?", "opciones": ["Sergio Romero", "Mariano Andújar", "Agustín Orion"], "correcta": "Sergio Romero"},
-    {"pregunta": "¿Qué jugador convirtió el gol agónico de River contra Boca en la final de Madrid 2018 para poner el 3-1?", "opciones": ["Gonzalo Martínez", "Juan Fernando Quintero", "Lucas Pratto"], "correcta": "Gonzalo Martínez"},
-    {"pregunta": "¿Qué selección sudamericana es apodada tradicionalmente 'La Vinotinto'?", "opciones": ["Venezuela", "Ecuador", "Bolivia"], "correcta": "Venezuela"},
-    {"pregunta": "¿Quién tiene el récord de más goles anotados en un solo Mundial de fútbol (13 goles en 1958)?", "opciones": ["Just Fontaine", "Gerd Müller", "Pelé"], "correcta": "Just Fontaine"},
-    {"pregunta": "¿A qué club argentino pertenece el Estadio Ciudad de Vicente López?", "opciones": ["Platense", "Tigre", "Chacarita"], "correcta": "Platense"},
-    {"pregunta": "¿Qué país africano logró por primera vez en la historia llegar a las semifinales de un Mundial en Qatar 2022?", "opciones": ["Marruecos", "Senegal", "Camerún"], "correcta": "Marruecos"},
-    {"pregunta": "¿Qué futbolista argentino ganó el premio al Mejor Jugador Joven del Mundial de Qatar 2022?", "opciones": ["Enzo Fernández", "Julián Álvarez", "Alexis Mac Allister"], "correcta": "Enzo Fernández"},
-    {"pregunta": "¿Cuál de estos estadios se encuentra en la ciudad de Rosario?", "opciones": ["Coloso del Parque", "Estadio Mario Kempes", "Estadio Único"], "correcta": "Coloso del Parque"},
-    {"pregunta": "¿Cuántas Copas del Mundo de la FIFA ha ganado la Selección Italiana hasta el momento?", "opciones": ["4", "3", "5"], "correcta": "4"},
-    {"pregunta": "¿Quién es el máximo goleador histórico de los mundiales de fútbol masculinos con 16 goles?", "opciones": ["Miroslav Klose", "Ronaldo Nazário", "Gerd Müller"], "correcta": "Miroslav Klose"}
-]
-
+# --- VARIABLES DE CONTROL ---
+BANCO_TRIVIAS = []
 INDICE_INDIVIDUAL = {}
 jugadores_esperando = []
 salas_activas = {}
 RANKING_GLOBAL = {}
 
 # ----------------------------------------------------------------
-# LÓGICA DE DATOS & INTELIGENCIA ARTIFICIAL (ENDPOINT CORREGIDO)
+# CONEXIÓN CON API-FOOTBALL (apifootball.com)
 # ----------------------------------------------------------------
 
-def consultar_api_futbol_masivo():
-    """Consulta los últimos partidos apuntando al endpoint real de API-Sports."""
-    url = "https://api-sports.io"
-    querystring = {"last": "40", "status": "FT"}
+def obtener_datos_futbol_real():
+    """
+    Se conecta a la API de apifootball.com para extraer estadísticas reales.
+    Utiliza la Liga Profesional Argentina (League ID: 128) y la temporada 2026.
+    """
+    url_base = "https://api-sports.io"
     headers = {
-        'x-apisports-key': FOOTBALL_API_KEY,
-        'x-rapidapi-host': 'v3.football.api-sports.io'
+        "x-rapidapi-host": "v3.football.api-sports.io",
+        "x-rapidapi-key": FOOTBALL_API_KEY
     }
+    
+    datos_futbol = {
+        "goleadores": [],
+        "estadios": [],
+        "partidos_jugados": []  # <-- NUEVA CATEGORÍA: Datos genéricos de equipos que jugaron
+    }
+    
     try:
-        print("[API FÚTBOL]: Intentando conectar al servicio externo...")
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
-        print(f"[API FÚTBOL]: Código de respuesta HTTP {response.status_code}")
+        # 1. Obtener Top Scorers (Jugadores y Goles)
+        url_goleadores = f"{url_base}/players/topscorers?league=128&season=2026"
+        res_goleadores = requests.get(url_goleadores, headers=headers, timeout=10).json()
         
-        data = response.json()
-        if "errors" in data and data["errors"]:
-            print(f"[API FÚTBOL]: Error reportado por el proveedor -> {data['errors']}")
-            return None
-            
-        if data and data.get('response') and len(data['response']) > 0:
-            print(f"[API FÚTBOL]: Éxito. Se descargaron {len(data['response'])} partidos reales.")
-            return data['response']
-        else:
-            print("[API FÚTBOL]: Servidor respondió con un array de partidos vacío.")
-    except Exception as e:
-        print(f"[API FÚTBOL]: Error de conexión/timeout -> {e}")
-    return None
+        if "response" in res_goleadores:
+            for item in res_goleadores["response"][:12]:
+                player = item["player"]
+                statistics = item["statistics"][0] if isinstance(item["statistics"], list) else item["statistics"]
+                datos_futbol["goleadores"].append({
+                    "nombre": player["name"],
+                    "equipo": statistics["team"]["name"],
+                    "goles": statistics["goals"]["total"],
+                    "nacionalidad": player["nationality"]
+                })
+                
+        # 2. Obtener Estadios y Equipos de la liga
+        url_equipos = f"{url_base}/teams?league=128&season=2026"
+        res_equipos = requests.get(url_equipos, headers=headers, timeout=10).json()
+        
+        if "response" in res_equipos:
+            for item in res_equipos["response"][:12]:
+                team = item["team"]
+                venue = item["venue"]
+                datos_futbol["estadios"].append({
+                    "equipo": team["name"],
+                    "estadio_nombre": venue["name"],
+                    "ciudad": venue["city"],
+                    "capacidad": venue["capacity"]
+                })
 
-def generar_trivia_de_partido(partido_raw):
-    """Envía el JSON del partido a Grok para formatear una pregunta válida."""
-    partido_string = json.dumps(partido_raw)
-    prompt = f""" te paso el codigo import asyncio
-    Basándote estrictamente en los datos estructurados de este partido de fútbol en formato JSON:
-    {partido_string}
-    Generá UNA pregunta de trivia que sea sumamente variada y específica. 
+        # 3. NUEVO: Obtener los últimos 15 partidos jugados (Equipos, Goles del partido y Estadio)
+        url_fixtures = f"{url_base}/fixtures?league=128&season=2026&status=FT"  # FT = Full Time (Partidos finalizados)
+        res_fixtures = requests.get(url_fixtures, headers=headers, timeout=10).json()
+
+        if "response" in res_fixtures:
+            # Tomamos los últimos 15 partidos del array de resultados
+            for item in res_fixtures["response"][-15:]:
+                teams = item["teams"]
+                goals = item["goals"]
+                fixture_venue = item["fixture"]["venue"]
+                
+                datos_futbol["partidos_jugados"].append({
+                    "local": teams["home"]["name"],
+                    "visitante": teams["away"]["name"],
+                    "goles_local": goals["home"],
+                    "goles_visitante": goals["away"],
+                    "estadio": fixture_venue["name"],
+                    "ciudad": fixture_venue["city"]
+                })
+                
+    except Exception as e:
+        print(f"Error al recolectar datos de API-Football: {e}")
+        
+    return datos_futbol
+
+# ----------------------------------------------------------------
+# GENERACIÓN DE TRIVIAS CON JSON MODE (GROK)
+# ----------------------------------------------------------------
+
+async def generar_banco_trivias_ai():
+    """
+    Toma todos los datos en tiempo real de partidos, goleadores y estadios,
+    y genera un JSON estructurado de 40 preguntas basadas en el contexto real.
+    """
+    global BANCO_TRIVIAS
+    print("Obteniendo estadísticas desde API-Football...")
+    
+    loop = asyncio.get_running_loop()
+    contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
+    
+    print("Iniciando solicitud a Grok con los datos del fútbol real...")
+
+    prompt_sistema = (
+        "Sos un experto en trivias de fútbol. Tu única tarea es armar un juego interactivo. "
+        "Debes responder ÚNICAMENTE con un objeto JSON estructurado que contenga un array "
+        "de exactamente 40 preguntas bajo la clave 'preguntas'. Sin introducciones, ni bloques Markdown."
+    )
+
+    prompt_usuario = f"""
+    Basándote en los siguientes datos reales proporcionados por la API de fútbol:
+    {json.dumps(contexto_futbol, ensure_ascii=False)}
+    
+    Genera un array de exactamente 40 preguntas de trivia de fútbol variadas:
+    - Diseña preguntas usando los datos de 'partidos_jugados' (ej: quién ganó cierto partido, cuántos goles hizo el local/visitante, o en qué estadio jugaron esos dos equipos específicos).
+    - Diseña preguntas usando los datos de 'goleadores' (goles de jugadores actuales, sus equipos o nacionalidad).
+    - Diseña preguntas usando los datos de 'estadios' (capacidad, ciudad o a qué equipo le pertenece).
+    
+    Cada pregunta debe seguir esta estructura JSON exacta:
+    {{"pregunta": "texto", "opciones": ["opcion1", "opcion2", "opcion3"], "correcta": "opcion_exacta"}}
+    
+    Asegúrate de que la respuesta 'correcta' sea idéntica a una de las opciones del array.
+    """
+
+    try:
+        completion = await loop.run_in_executor(
+            None,
+            lambda: client.chat.completions.create(
+                model="grok-beta", 
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": prompt_sistema},
+                    {"role": "user", "content": prompt_usuario}
+                ]
+            )
+        )
+
+        contenido_crudo = completion.choices.message.content
+        datos_parseados = json.loads(contenido_crudo)
+        
+        if "preguntas" in datos_parseados and isinstance(datos_parseados["preguntas"], list):
+            BANCO_TRIVIAS = datos_parseados["preguntas"]
+            print(f"¡Éxito! Se inyectaron {len(BANCO_TRIVIAS)} preguntas reales de partidos y equipos en el servidor.")
+        else:
+            print("Error: El formato de la IA no contiene el nodo 'preguntas'.")
+
+    except Exception as e:
+        print(f"Fallo crítico en la generación de IA: {e}")
+        BANCO_TRIVIAS = [
+            {"pregunta": "¿Qué selección ganó el mundial de Qatar 2022?", "opciones": ["Argentina", "Francia", "Brasil"], "correcta": "Argentina"}
+        ]
+
+# ----------------------------------------------------------------
+# CONEXIÓN WEBSOCKET PARA RENDER
+# ----------------------------------------------------------------
+
+async def manejador_websocket(websocket):
+    try:
+        async for mensaje in websocket:
+            pass 
+    except websockets.exceptions.ConnectionClosed:
+        pass
+
+async def main():
+    await generar_banco_trivias_ai()
+
+    puerto = int(os.environ.get("PORT", 10000))
+    async with websockets.serve(manejador_websocket, "0.0.0.0", puerto):
+        print(f"Servidor WebSocket escuchando en el puerto {puerto}")
+        await asyncio.Future() 
+
+if __name__ == "__main__":
+    asyncio.run(main())
