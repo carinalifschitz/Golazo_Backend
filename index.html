@@ -108,7 +108,8 @@
 
         const BANCO_NATIVO = [
             {"pregunta": "¿Qué equipo venció al Real Madrid en la Intercontinental del 2000?", "opciones": ["Boca Juniors", "River Plate", "Palmeiras"], "correcta": "Boca Juniors"},
-            {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"}
+            {"pregunta": "¿Quién es el máximo goleador histórico de la Selección Argentina?", "opciones": ["Lionel Messi", "Gabriel Batistuta", "Diego Maradona"], "correcta": "Lionel Messi"},
+            {"pregunta": "¿En qué club europeo debutó el Kun Agüero?", "opciones": ["Atlético de Madrid", "Manchester City", "Barcelona"], "correcta": "Atlético de Madrid"}
         ];
 
         function cambiarPantalla(id) {
@@ -123,12 +124,11 @@
             cambiarPantalla("scr-wait");
 
             try {
-                // Petición HTTP Clásica al backend de Render
                 const respuesta = await fetch("/api/trivias");
                 const datos = await respuesta.json();
                 preguntasPartida = datos.preguntas && datos.preguntas.length > 0 ? datos.preguntas : BANCO_NATIVO;
             } catch (error) {
-                console.log("Error de conexión, usando banco nativo.");
+                console.log("Error de conexión, usando banco local.");
                 preguntasPartida = BANCO_NATIVO;
             }
 
@@ -179,7 +179,7 @@
             if (indicePreguntaActual < preguntasPartida.length) {
                 renderizarPreguntaActual();
             } else {
-                alert(`¡Juego terminado! Lograste un total de: ${puntosLocal} pts.`);
+                alert(`¡Juego terminado! Tu puntuación final es: ${puntosLocal} pts.`);
                 cambiarPantalla("scr-menu");
             }
         }
