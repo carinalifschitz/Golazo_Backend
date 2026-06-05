@@ -177,6 +177,7 @@ async def manejar_cliente(websocket):
                 id_sala = datos.get("id_sala")
                 eleccion = datos.get("eleccion")
                 
+                # --- RESPUESTA EN MODO INDIVIDUAL AUTOMÁTICO ---
                 if not id_sala or id_sala == "":
                     idx = INDICE_INDIVIDUAL[nombre_jugador]
                     trivia_obj = trivias_disponibles[idx]
@@ -185,15 +186,27 @@ async def manejar_cliente(websocket):
                     if es_correcto:
                         RANKING_GLOBAL[nombre_jugador] += 100
                     
+                    # Avanzamos el índice para calcular la que sigue
                     INDICE_INDIVIDUAL[nombre_jugador] += 1
+                    nuevo_idx = INDICE_INDIVIDUAL[nombre_jugador]
                     
+                    # Control de ciclo: si llegó al tope (40), resetea a la primera
+                    if nuevo_idx >= len(trivias_disponibles):
+                        nuevo_idx = 0
+                        INDICE_INDIVIDUAL[nombre_jugador] = 0
+                    
+                    siguiente_trivia = trivias_disponibles[nuevo_idx]
+                    
+                    # Enviamos el veredicto actual Y la próxima pregunta adjunta en el mismo payload
                     await websocket.send(json.dumps({
                         "tipo": "resultado", 
                         "correcto": es_correcto,
-                        "ranking_global": RANKING_GLOBAL
+                        "ranking_global": RANKING_GLOBAL,
+                        "siguiente_pregunta": siguiente_trivia
                     }))
                     continue
                 
+                # --- RESPUESTA EN MODO MULTIJUGADOR ---
                 if id_sala in salas_activas:
                     sala = salas_activas[id_sala]
                     tiempo_respuesta = time.time() - sala["tiempo_inicio"]
