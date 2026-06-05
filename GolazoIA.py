@@ -6,9 +6,10 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-# --- CONFIGURACIÓN DE CREDENCIALES ---
-GROK_API_KEY = os.environ.get("GROK_API_KEY", "TU_API_KEY_DE_GROK")
-FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "TU_API_KEY_DE_API_FOOTBALL")
+# --- CONFIGURACIÓN DE CREDENCIALES DESDE RENDER ---
+# os.environ.get lee los valores exactos que configuraste en la pestaña Environment Variables
+GROK_API_KEY = os.environ.get("GROK_API_KEY")
+FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
 
 # --- BANCO DE RESPALDO INTEGRADO (40 PREGUNTAS COMPLETAS) ---
 BANCO_RESPALDO = [
@@ -54,6 +55,27 @@ BANCO_RESPALDO = [
     {"pregunta": "¿Qué club del fútbol argentino juega en el Estadio Libertadores de América?", "opciones": ["Independiente", "Racing", "Arsenal"], "correcta": "Independiente"}
 ]
 
+def obtener_datos_futbol_real():
+    url_base = "https://api-sports.io"
+    headers = {
+        "x-rapidapi-host": "v3.football.api-sports.io",
+        "x-rapidapi-key": FOOTBALL_API_KEY,
+        "x-apisports-key": FOOTBALL_API_KEY
+    }
+    datos_futbol = {"goleadores": [], "estadios": []}
+    try:
+        url_goleadores = f"{url_base}/players/topscorers?league=128&season=2024"
+        res_goleadores = requests.get(url_goleadores, headers=headers, timeout=4).json()
+        if "response" in res_goleadores and isinstance(res_goleadores["response"], list):
+            for item in res_goleadores["response"][:10]:
+                player = item.get("player", {})
+                datos_futbol["goleadores"].append({
+                    "nombre": player.get("name", "Desconocido")
+                })
+    except Exception:
+        pass
+    return datos_futbol
+
 app = FastAPI()
 
 app.add_middleware(
@@ -74,7 +96,11 @@ async def obtener_interfaz():
 
 @app.get("/api/trivias")
 async def obtener_trivias_http():
-    # LLAMADA HTTP PURA A GROK SIN USAR LA LIBRERÍA 'openai' (Evita fallos de inicio)
+    # Validación preventiva por si las variables no se leyeron bien
+    if not GROK_API_KEY:
+        print("Aviso: GROK_API_KEY está vacía en Render. Usando banco harcodeado.")
+        return {"questions": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
+
     try:
         url_grok = "https://x.ai"
         headers_grok = {
@@ -82,31 +108,11 @@ async def obtener_trivias_http():
             "Content-Type": "application/json"
         }
         
-        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. Sin bloques Markdown ni texto extra."
-        prompt_usuario = "Genera un array de exactamente 40 preguntas de trivia variadas sobre fútbol internacional y argentino. Cada una debe tener la estructura exacta: pregunta, opciones (array de 3 strings), correcta (string exacto)."
+        loop = asyncio.get_running_loop()
+        contexto = await loop.run_in_executor(None, obtener_datos_futbol_real)
+        
+        prompt_sistema = "Sos un experto en trivias de fútbol. Responde ÚNICAMENTE con un objeto JSON válido que contenga un array de exactamente 40 preguntas bajo la clave 'preguntas'. No uses bloques de código Markdown ni texto extra."
+        prompt_usuario = f"Basándote en estos datos reales: {json.dumps(contexto)} Genera un array de exactamente 40 preguntas de trivia variadas sobre fútbol internacional y argentino de los últimos años. Estructura requerida: pregunta, opciones (array de 3 strings), correcta (debe coincidir exactamente con una de las opciones)."
 
         payload = {
             "model": "grok-beta",
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": prompt_sistema},
-                {"role": "user", "content": prompt_usuario}
-            ],
-            "temperature": 0.7
-        }
-
-        res = requests.post(url_grok, json=payload, headers=headers_grok, timeout=8)
-        datos = res.json()
-        
-        # Si Grok responde correctamente, parseamos el JSON estructurado
-        contenido_texto = datos["choices"][0]["message"]["content"]
-        datos_parseados = json.loads(contenido_texto)
-        
-        if "preguntas" in datos_parseados and len(datos_parseados["preguntas"]) > 0:
-            return {"preguntas": datos_parseados["preguntas"]}
-            
-    except Exception:
-        pass
-    
-    # Si la API falla o no tiene saldo, mandamos las 40 preguntas mezcladas al azar al instante
-    return {"preguntas": random.sample(BANCO_RESPALDO, len(BANCO_RESPALDO))}
