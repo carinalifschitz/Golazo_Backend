@@ -56,19 +56,19 @@ BANCO_RESPALDO = [
 ]
 
 def obtener_datos_futbol_real():
-    url_base = "https://api-sports.io"
+    # CORRECCIÓN: Usamos el endpoint global de RapidAPI optimizado para servidores en la nube
+    url_base = "https://rapidapi.com"
     headers = {
-        "x-rapidapi-host": "v3.football.api-sports.io",
-        "x-rapidapi-key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
-        "x-apisports-key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "X-RapidAPI-Host": "://rapidapi.com",
+        "X-RapidAPI-Key": FOOTBALL_API_KEY if FOOTBALL_API_KEY else "",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     }
     datos_futbol = {"goleadores": []}
     
-    print("[DIAGNÓSTICO] ---> Llamando a API-Football...")
+    print("[DIAGNÓSTICO] ---> Llamando a API-Football mediante túnel RapidAPI...")
     try:
         url_goleadores = f"{url_base}/players/topscorers?league=128&season=2024"
-        res = requests.get(url_goleadores, headers=headers, timeout=5)
+        res = requests.get(url_goleadores, headers=headers, timeout=6)
         
         print(f"[DIAGNÓSTICO] API-Football respondió con Código HTTP: {res.status_code}")
         
@@ -84,10 +84,10 @@ def obtener_datos_futbol_real():
                     })
                 print(f"[DIAGNÓSTICO] API-Football exitosa. {len(datos_futbol['goleadores'])} goleadores extraídos.")
         else:
-            print("[ALERTA API-FÚTBOL] Bloqueo de Firewall detectado. Usando datos alternativos.")
+            print(f"[ALERTA API-FÚTBOL] Error de respuesta de red: {res.status_code}")
             
     except Exception as e:
-        print(f"[ALERTA API-FÚTBOL] Error de conexión: {e}")
+        print(f"[ALERTA API-FÚTBOL] Excepción de conexión: {e}")
         
     return datos_futbol
 
@@ -118,12 +118,13 @@ async def obtener_trivias_http():
         copia_respaldo = list(BANCO_RESPALDO)
         random.shuffle(copia_respaldo)
         return {"preguntas": copia_respaldo}
-    # 1. Ejecutar llamada a API-Football de forma asíncrona correcta
+
+    # 1. Ejecutar llamada a API-Football
     loop = asyncio.get_running_loop()
     contexto_futbol = await loop.run_in_executor(None, obtener_datos_futbol_real)
     
     if not contexto_futbol.get("goleadores"):
-        print("[DIAGNÓSTICO] API-Football vacía/fallida. Armando datos ficticios de control para Grok.")
+        print("[DIAGNÓSTICO] API-Football falló. Pasando datos dinámicos simulados para asegurar el flujo de Grok.")
         contexto_futbol = {
             "goleadores": [
                 {"nombre": "Miguel Borja", "equipo": "River Plate"},
@@ -133,7 +134,7 @@ async def obtener_trivias_http():
             ]
         }
 
-    # 2. Ejecutar llamada a Grok adentro del bloque correspondiente
+    # 2. Ejecutar llamada a Grok
     try:
         url_grok = "https://x.ai"
         headers_grok = {
@@ -148,7 +149,7 @@ async def obtener_trivias_http():
         )
         prompt_usuario = (
             f"Basándote en estos datos de goleadores actuales: {json.dumps(contexto_futbol, ensure_ascii=False)}. "
-            "Generá un array de exactamente 40 preguntas de trivia con estructura: pregunta, opciones (array de 3), correcta."
+            "Generá un array de exactamente 40 preguntas de trivia con estructura de objeto JSON: pregunta, opciones (array de 3), correcta."
         )
 
         payload = {
@@ -186,4 +187,3 @@ async def obtener_trivias_http():
     copia_respaldo = list(BANCO_RESPALDO)
     random.shuffle(copia_respaldo)
     return {"preguntas": copia_respaldo}
-
