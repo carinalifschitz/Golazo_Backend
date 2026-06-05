@@ -253,18 +253,20 @@ async def manejar_cliente(websocket):
 # ----------------------------------------------------------------
 
 async def main():
-    # Lanzamos la precarga pesada en un hilo paralelo para no congelar los websockets
-    loop = asyncio.get_running_loop()
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    loop.run_in_executor(executor, precargar_banco_trivias_sincrono)
-    
     # Configuración de puerto para Render
     puerto = int(os.environ.get("PORT", 8765))
     print(f"[SISTEMA]: Iniciando servidor WebSocket en 0.0.0.0:{puerto}")
     
-    # Desactivamos restricciones de origen (origins=None) para permitir conexiones de prueba externas
-    async with websockets.serve(manejar_cliente, "0.0.0.0", puerto, origins=None):
-        await asyncio.Future()  # Mantiene el servidor escuchando para siempre
+    # 1. LEVANTAMOS EL SERVIDOR PRIMERO (Para que el HTML conecte al toque)
+    server = await websockets.serve(manejar_cliente, "0.0.0.0", puerto, origins=None)
+    
+    # 2. LANZAMOS LA PRECARGA EN SEGUNDO PLANO DESPUÉS DE QUE EL SERVIDOR YA ESTÁ ESCUCHANDO
+    loop = asyncio.get_running_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    loop.run_in_executor(executor, precargar_banco_trivias_sincrono)
+    
+    # Mantiene el servidor escuchando para siempre
+    await asyncio.Future()
 
 if __name__ == "__main__":
     asyncio.run(main())
