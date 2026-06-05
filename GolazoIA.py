@@ -114,7 +114,7 @@ app.add_middleware(
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def obtener_interfaz(request: Request):
     ruta_html = os.path.join(os.path.dirname(__file__), "index.html")
-       if os.path.exists(ruta_html):
+    if os.path.exists(ruta_html):
         with open(ruta_html, "r", encoding="utf-8") as archivo:
             return HTMLResponse(content=archivo.read(), status_code=200)
     return HTMLResponse(content="<h1>⚽ Servidor Golazo IA Activo</h1>", status_code=200)
@@ -154,7 +154,7 @@ async def obtener_trivias_http():
 
     # 2. Mandar el JSON limpio directamente a los servidores de xAI (Grok)
     try:
-        # URL oficial y directa de la API de Grok de xAI
+        # CORRECCIÓN: URL técnica de desarrollo oficial obtenida de x.ai
         url_grok = "https://x.ai"
         headers_grok = {
             "Authorization": f"Bearer {GROK_API_KEY}",
@@ -162,7 +162,7 @@ async def obtener_trivias_http():
         }
         
         prompt_sistema = (
-            "Sos un historiador deportivo experto en Copas del Mundo. Tu única tarea es responder con un objeto JSON válido. "
+            "Sos un experto en fútbol. Tu única tarea es responder con un objeto JSON válido. "
             "Este JSON debe tener una clave única llamada 'preguntas' que contenga un array de exactamente 40 objetos. "
             "No devuelvas bloques Markdown ni texto explicativo extra."
         )
